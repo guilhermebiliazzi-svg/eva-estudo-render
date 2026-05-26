@@ -31,9 +31,10 @@ function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
 
 const roundTo = (v, step) => Math.round(v/step)*step;
 const floorTo = (v, step) => Math.floor(v/step)*step;
-// 13.8 -> "R$ 13,8 milhões" | 14 -> "R$ 14,0 milhões"
-const milhoes = v => "R$ " + (v/1e6).toFixed(1).replace(".", ",") + " milhões";
-const mi      = v => "R$ " + (v/1e6).toFixed(1).replace(".", ",") + " mi";
+const decs    = v => (v/1e6) < 10 ? 2 : 1;   // <R$10mi: 2 casas; senão 1
+// 1.43e6 -> "R$ 1,43 milhões" | 13.8e6 -> "R$ 13,8 milhões"
+const milhoes = v => "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " milhões";
+const mi      = v => "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " mi";
 const pct     = f => "+" + ((f-1)*100).toFixed(1).replace(".", ",") + "%";
 
 function parseDataBR(d){ // "19/12/2023" ou Date/ISO -> {ano,mes}
@@ -45,7 +46,6 @@ function parseDataBR(d){ // "19/12/2023" ou Date/ISO -> {ano,mes}
 
 function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const desagio   = opts.desagio ?? 0.05;   // pedido -> fechamento
-  const passo     = opts.passo   ?? 0.5e6;  // arredondamento de leitura (R$ 0,5 mi)
   const hoje      = new Date();
   const anoRef    = ref?.ano ?? hoje.getFullYear();
   const mesRef    = ref?.mes ?? (hoje.getMonth()+1);
@@ -55,6 +55,9 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     [...vendidos].sort((a,b)=> (parseDataBR(b.data).ano*12+parseDataBR(b.data).mes) - (parseDataBR(a.data).ano*12+parseDataBR(a.data).mes))[0];
   const aV = Number(anchor.valor);
   const aD = parseDataBR(anchor.data);
+
+  // passo de arredondamento adaptativo à magnitude — R$1mi não pode arredondar em R$0,5mi
+  const passo = opts.passo ?? (aV < 3e6 ? 50e3 : aV < 8e6 ? 250e3 : 0.5e6);
 
   // 2) teto por correção monetária (IPCA)
   const fator = ipcaFactor(aD.ano, aD.mes, anoRef, mesRef);
@@ -91,7 +94,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     ancora_curto: ancoraCurto,
     ipca_pct: pct(fator),
     valor_mercado: milhoes(valorMerc),
-    faixa: `${milhoes(faixaMin).replace("R$ ","R$ ").replace(" milhões","")} a ${(faixaMax/1e6).toFixed(1).replace(".",",")} milhões`,
+    faixa: `R$ ${(faixaMin/1e6).toFixed(decs(faixaMin)).replace(".",",")} a ${(faixaMax/1e6).toFixed(decs(faixaMax)).replace(".",",")} milhões`,
     anuncio_sugerido: milhoes(anuncio),
     anuncio_sub: `alinhado ao concorrente direto · fechamento esperado ~${mi(fechamento)}`,
     conclusao_apoio: `Ancorado na venda real do próprio prédio (ITBI) e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(anuncio)}).`,

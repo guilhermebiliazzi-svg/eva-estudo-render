@@ -247,13 +247,22 @@ function buildEstudo(data, opts={}){
     const head=["Data","Unidade","Área constr.*","Valor","R$/m²"].map(hdr);
     const cell=(t,o={})=>({text:String(t),options:{fontSize:11,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
     const HL={color:ICETINT};
-    const vend = data.vendidos||[];
+    const allVend = data.vendidos||[];
+    // cabe ~8 linhas no slide. Se passar, mantém a mais antiga (base da tendência)
+    // + as mais recentes (inclui a âncora) e sinaliza o total no rodapé.
+    const MAXFIT = 8;
+    let vend = allVend, trunc = 0;
+    if (allVend.length > MAXFIT) {
+      vend = [allVend[0], ...allVend.slice(allVend.length-(MAXFIT-1))];
+      trunc = allVend.length - vend.length;
+    }
+    const rowH = vend.length > 6 ? 0.33 : 0.42;
     const rows = vend.map(v=>{ const f=v.ancora?HL:undefined;
       return [cell(v.data,v.ancora?{fill:HL,bold:true}:{}),cell(v.unidade,v.ancora?{fill:HL,bold:true}:{}),
         cell(v.area,f?{fill:f}:{}),cell(v.valor,v.ancora?{fill:HL,bold:true}:{}),cell(v.valor_m2,f?{fill:f}:{})];
     });
     s.addTable([head,...rows],{x:MX,y:1.7,w:5.7,colW:[1.15,1.55,1.1,1.1,0.8],
-      border:{type:"solid",color:LINE,pt:0.75},rowH:0.42,valign:"middle",fontFace:BODY,autoPage:false});
+      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false});
     // callout de tendência (primeiro -> âncora)
     const de = vend[0]||{}, ate = vend.find(v=>v.ancora) || vend[vend.length-1] || {};
     const cx=6.55, cw=2.9;
@@ -266,7 +275,7 @@ function buildEstudo(data, opts={}){
     s.addText([{text:ate.valor||"",options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
       {text:yearOf(ate.data)+" — alta acima do IPCA",options:{fontSize:11,color:ICE}}],
       {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
-    s.addText("* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios; a comparação direta é pelo valor total.",
+    s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios; a comparação direta é pelo valor total.${trunc?`  ·  ${allVend.length} transações no total; exibindo a mais antiga e as ${MAXFIT-1} mais recentes.`:""}`,
       {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     footer(s,10);
   }
@@ -276,14 +285,15 @@ function buildEstudo(data, opts={}){
     eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
     s.addImage({path:A+"ciclo_vida.png",x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
     const tx=7.3, tw=2.2;
-    const predio=im.predio_curto||"O imóvel", idade=im.idade_anos!=null?`~${im.idade_anos} anos`:"sua idade atual";
+    const predio=im.predio_curto||"imóvel";
+    const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
     const vend=data.vendidos||[]; const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
     s.addText([
       {text:"O valor de um imóvel é terreno (valoriza) + construção (deprecia).",options:{color:INK,breakLine:true,bold:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
       {text:"O total sobe nos primeiros anos, atinge um platô e depois cede em termos reais.",options:{color:INK,breakLine:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
-      {text:`O ${predio} (${idade}) está entrando no platô — por isso projetar o boom para a frente seria um erro.`,options:{color:INK}},
+      {text:`O ${predio}${idadeTxt} está entrando no platô — por isso projetar o boom para a frente seria um erro.`,options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
     s.addText(`A tabela do ITBI confirma: ${de.valor||""} (${yearOf(de.data)}) → ${ate.valor||""} (${yearOf(ate.data)}).`,
       {x:MX,y:4.85,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
