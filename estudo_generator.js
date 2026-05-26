@@ -284,6 +284,20 @@ function buildEstudo(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
     s.addImage({path:A+"ciclo_vida.png",x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
+    // marcador dinâmico sobre o gráfico — posicionado pela idade real do imóvel.
+    // geometria do plot dentro do PNG (precisa casar com o ciclo_vida.png): L/R/T/B
+    if (im.idade_anos != null) {
+      const imgX=MX, imgY=1.55, imgW=6.55, imgH=6.55*5.0/10.6;
+      const PL=0.07, PR=0.97, PT=0.14, PB=0.76;
+      const idadeM=Math.max(0, Math.min(40, Number(im.idade_anos)));
+      const mx=imgX + (PL + (idadeM/40)*(PR-PL))*imgW;
+      const yTop=imgY + PT*imgH, yBot=imgY + PB*imgH;
+      s.addShape(p.shapes.LINE,{x:mx,y:yTop,w:0,h:yBot-yTop,line:{color:RED,width:1.5,dashType:"dash"}});
+      const lblW=2.4, lx=Math.max(imgX, Math.min(mx-lblW/2, imgX+imgW-lblW));
+      s.addText(`${im.predio_curto||"este imóvel"} · ~${idadeM} anos`,
+        {x:lx,y:yTop-0.32,w:lblW,h:0.27,fontFace:BODY,fontSize:10.5,color:NAVY,bold:true,
+         align:"center",valign:"middle",margin:0,fill:{color:ICETINT}});
+    }
     const tx=7.3, tw=2.2;
     const predio=im.predio_curto||"imóvel";
     const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
