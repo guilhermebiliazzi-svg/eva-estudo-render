@@ -1,0 +1,37 @@
+{
+  "buildingKey": "R HERMANO RIBEIRO DA SILVA|155|4008080",
+  "estudo_data": "maio de 2026",
+  "ref": { "ano": 2026, "mes": 4 },
+  "corretor": {
+    "nome": "Vivian Zatz",
+    "creci": "307894",
+    "unidade": "RE/MAX Ville",
+    "foto": "./assets/vivian.png",
+    "bio": "Atua no mercado de alto padrão da Zona Sul de São Paulo, com foco em Vila Mariana, Paraíso e Ibirapuera. Une o conhecimento fino da região à representação do vendedor com método: precificação fundamentada, exposição na rede RE/MAX e negociação conduzida com discrição e transparência — para anunciar pelo valor certo e vender no tempo certo."
+  },
+  "imovel": {
+    "titulo": "Apartamento de alto padrão\nVila Mariana / Paraíso",
+    "subtitulo": "Condomínio Marquise Ibirapuera · 411 m² · 4 suítes · 5 vagas",
+    "predio_curto": "Marquise",
+    "idade_anos": 13,
+    "foto_fachada": "./assets/fachada.png",
+    "foto_interior": "./assets/interior.png",
+    "ficha": [
+      ["Endereço", "R. Hermano Ribeiro da Silva, 155"],
+      ["Bairro", "Vila Mariana / Paraíso"],
+      ["Condomínio", "Marquise Ibirapuera (2013)"],
+      ["Área útil", "411 m²"],
+      ["Dormitórios", "4 — sendo 4 suítes"],
+      ["Vagas", "5"],
+      ["Posição", "Andar alto · vista frente"],
+      ["Estado", "Conservado · mobiliado"]
+    ]
+  },
+  "amostras": [
+    { "tipo": "avaliando", "nome": "Marquise (avaliando)", "bairro": "V. Mariana", "area": "411 m²", "suites": "4", "vagas": "5", "pedido": "R$ 15,0 mi", "valor": 15000000, "valor_m2": "36.496" },
+    { "tipo": "mesmo_predio", "ref": "CF 611457", "nome": "Mesmo prédio (CF 611457)", "bairro": "V. Mariana", "area": "407 m²", "suites": "3", "vagas": "5", "pedido": "R$ 14,0 mi", "valor": 14000000, "valor_m2": "34.398", "link": "https://www.coelhodafonseca.com.br/ibirapuera/apartamento-4-dormitorios-3-suites-5-vagas-407-metros-cf611457" },
+    { "tipo": "mesmo_predio", "ref": "Finder AP14466", "nome": "Mesmo prédio (Finder AP14466)", "bairro": "V. Mariana", "area": "411 m²", "suites": "4", "vagas": "5", "pedido": "R$ 14,99 mi", "valor": 14990000, "valor_m2": "36.472", "link": "https://www.finderimoveis.com.br/imovel/apartamento-sao-paulo-4-quartos-411-m/AP14466-F46" },
+    { "tipo": "comparavel", "nome": "Vista parque (BNSIR 91081)", "bairro": "Paraíso", "area": "339 m²", "suites": "3", "vagas": "5", "pedido": "R$ 12,5 mi", "valor": 12500000, "valor_m2": "36.873", "link": "https://www.bnsir.com.br/usado/comprar/sao-paulo/ibirapuera/13mm/339mts/3d/apartamento-com-vista-aberta-para-o-parque-ibirapuera-no-paraiso/91081" },
+    { "tipo": "comparavel", "nome": "Garden L.180 Ibirapuera", "bairro": "Ibirapuera", "area": "520 m²", "suites": "4", "vagas": "5", "pedido": "R$ 16,0 mi", "valor": 16000000, "valor_m2": "30.769", "link": "https://www.zsimovel.com.br/imovel/apartamento-venda-15milhoes-ate-20milhoes-4quartos-5vagas-520m2-vila-mariana-zona-sul-sao-paulo-sp/4360047/" }
+  ]
+}

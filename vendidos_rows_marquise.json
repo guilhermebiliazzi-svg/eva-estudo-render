@@ -1,0 +1,50 @@
+[
+  {
+    "data": "2018-08-24",
+    "unidade": "AP 101  1DEP",
+    "area_m2": 743.0,
+    "valor": 7400000.0,
+    "valor_m2": 9959.62,
+    "is_ancora": false
+  },
+  {
+    "data": "2018-09-24",
+    "unidade": "AP 171  1DEP",
+    "area_m2": 743.0,
+    "valor": 7500000.0,
+    "valor_m2": 10094.21,
+    "is_ancora": false
+  },
+  {
+    "data": "2019-04-02",
+    "unidade": "AP 191  1DEP",
+    "area_m2": 743.0,
+    "valor": 8100000.0,
+    "valor_m2": 10901.75,
+    "is_ancora": false
+  },
+  {
+    "data": "2020-04-06",
+    "unidade": "AP 81  1DEP",
+    "area_m2": 743.0,
+    "valor": 8500000.0,
+    "valor_m2": 11440.11,
+    "is_ancora": false
+  },
+  {
+    "data": "2020-11-30",
+    "unidade": "AP 211  1DEP",
+    "area_m2": 745.0,
+    "valor": 10200000.0,
+    "valor_m2": 13691.28,
+    "is_ancora": false
+  },
+  {
+    "data": "2023-12-19",
+    "unidade": "AP 231  1DEP 5VG",
+    "area_m2": 749.0,
+    "valor": 13800000.0,
+    "valor_m2": 18424.57,
+    "is_ancora": true
+  }
+]

@@ -1,0 +1,33 @@
+# Render Blueprint — EVA · serviço de Estudo de Mercado (PPTX)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Após push pro GitHub:
+#   1. Render Dashboard -> New + -> Blueprint
+#   2. Conectar este repositório
+#   3. Render lê este arquivo e cria o serviço
+#   4. Painel vai perguntar os valores das envs com sync:false
+#      (DATABASE_URL, CF_ACCOUNT_ID, CF_API_TOKEN) — cole lá, NUNCA no código
+
+services:
+  - type: web
+    name: eva-estudo-render
+    runtime: node
+    plan: free
+    region: oregon            # us-west-2, mesma região do Supabase pra latência baixa
+    branch: main
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: ASSETS_DIR
+        value: ./assets
+      # PORT é injetada pelo Render automaticamente; o server.js já usa process.env.PORT
+      - key: DATABASE_URL
+        sync: false           # colar no painel do Render
+      - key: CF_ACCOUNT_ID
+        sync: false           # colar no painel do Render
+      - key: CF_API_TOKEN
+        sync: false           # colar no painel do Render

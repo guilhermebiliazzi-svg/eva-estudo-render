@@ -1,0 +1,126 @@
+{
+  "name": "EVA — Estudo de Mercado",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estudo-mercado",
+        "options": {}
+      },
+      "id": "intake",
+      "name": "Intake EVA (WhatsApp)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Disparado pela EVA quando o admin pede um estudo. Body esperado: { endereco|building_key, imovel, corretor, links[], estudo_data, ref }. Pode ser substituído pelo trigger/sub-workflow da EVA."
+    },
+    {
+      "parameters": {
+        "jsType": "javaScript",
+        "jsCode": "// normaliza o payload de entrada para os passos seguintes\nconst b = $json.body || $json;\nconst subject = {\n  predio_curto: b.imovel?.predio_curto || '',\n  logradouro: (b.imovel?.ficha?.find(f => /endere/i.test(f[0]))?.[1]) || b.endereco || '',\n  numero: b.numero || '',\n  building_key: b.building_key || b.buildingKey || ''\n};\nconst avaliando = b.avaliando || {\n  tipo: 'avaliando', nome: (b.imovel?.predio_curto || 'Avaliando') + ' (avaliando)',\n  bairro: b.imovel?.bairro || '', area: '', suites: '', vagas: '',\n  pedido: b.pedido_atual || '', valor: b.valor_atual || 0, valor_m2: ''\n};\nreturn [{ json: {\n  buildingKey: subject.building_key,\n  subject, avaliando,\n  urls: b.links || [],\n  imovel: b.imovel, corretor: b.corretor,\n  estudo_data: b.estudo_data, ref: b.ref\n} }];"
+      },
+      "id": "parse",
+      "name": "Parse intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RENDER_URL }}/amostras",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ avaliando: $json.avaliando, urls: $json.urls, subject: $json.subject }) }}",
+        "options": {}
+      },
+      "id": "amostras",
+      "name": "Extrair amostras (Cloudflare)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "notes": "Chama o serviço de render /amostras -> abre cada link no Cloudflare Browser Rendering, extrai e classifica (mesmo_predio/comparavel), e devolve { amostras, aprovacao }."
+    },
+    {
+      "parameters": {
+        "jsType": "javaScript",
+        "jsCode": "// guarda os dados do estudo + candidatos para depois da aprovação\nconst base = $('Parse intake').item.json;\nreturn [{ json: { ...base, amostras: $json.amostras, aprovacao: $json.aprovacao } }];"
+      },
+      "id": "merge",
+      "name": "Juntar p/ aprovação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_SEND_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $env.ADMIN_WHATSAPP, text: $json.aprovacao }) }}",
+        "options": {}
+      },
+      "id": "aprovacao",
+      "name": "Pedir aprovação (WhatsApp)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "notes": "TODO: trocar pelo seu envio de WhatsApp / reusar a cascata Aprovar_Curadoria/Aprovar_Carrossel. O admin responde 'ok', 'remover N' ou cola novos links."
+    },
+    {
+      "parameters": {
+        "jsType": "javaScript",
+        "jsCode": "// aplica a resposta do admin sobre os candidatos.\n// Espera a resposta do admin em $json.resposta (ligar ao retorno da cascata de aprovação).\nlet amostras = $('Juntar p/ aprovação').item.json.amostras;\nconst r = ($json.resposta || 'ok').toString().trim().toLowerCase();\nconst rem = [...r.matchAll(/remover\\s+(\\d+)/g)].map(m => parseInt(m[1], 10));\nif (rem.length) {\n  const cand = amostras.filter(a => a.tipo !== 'avaliando');\n  const drop = new Set(rem.map(n => n - 1));\n  amostras = [amostras.find(a => a.tipo === 'avaliando'), ...cand.filter((_, i) => !drop.has(i))].filter(Boolean);\n}\nconst base = $('Juntar p/ aprovação').item.json;\nreturn [{ json: { ...base, amostras } }];"
+      },
+      "id": "aplicar",
+      "name": "Aplicar aprovação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "notes": "TODO: conectar a entrada à resposta do admin vinda da cascata de aprovação (campo 'resposta')."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RENDER_URL }}/estudo",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buildingKey: $json.buildingKey, imovel: $json.imovel, corretor: $json.corretor, amostras: $json.amostras, estudo_data: $json.estudo_data, ref: $json.ref }) }}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "render",
+      "name": "Gerar estudo (render)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "notes": "Serviço /estudo: roda C1 (ITBI) + valoração + gerador e devolve o .pptx (binário)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_SEND_DOC_URL }}",
+        "contentType": "multipart-form-data",
+        "sendBody": true,
+        "options": {}
+      },
+      "id": "entregar",
+      "name": "Entregar .pptx (WhatsApp)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300],
+      "notes": "TODO: enviar o binário do .pptx ao admin pelo seu canal de WhatsApp (documento)."
+    }
+  ],
+  "connections": {
+    "Intake EVA (WhatsApp)": { "main": [[{ "node": "Parse intake", "type": "main", "index": 0 }]] },
+    "Parse intake": { "main": [[{ "node": "Extrair amostras (Cloudflare)", "type": "main", "index": 0 }]] },
+    "Extrair amostras (Cloudflare)": { "main": [[{ "node": "Juntar p/ aprovação", "type": "main", "index": 0 }]] },
+    "Juntar p/ aprovação": { "main": [[{ "node": "Pedir aprovação (WhatsApp)", "type": "main", "index": 0 }]] },
+    "Pedir aprovação (WhatsApp)": { "main": [[{ "node": "Aplicar aprovação", "type": "main", "index": 0 }]] },
+    "Aplicar aprovação": { "main": [[{ "node": "Gerar estudo (render)", "type": "main", "index": 0 }]] },
+    "Gerar estudo (render)": { "main": [[{ "node": "Entregar .pptx (WhatsApp)", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "meta": { "description": "Esqueleto: intake -> ITBI+amostras -> aprovação -> valoração+render -> entrega. Nós de WhatsApp são placeholders para plugar na cascata existente da EVA." }
+}
