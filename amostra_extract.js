@@ -13,25 +13,31 @@ const { cfJson } = require("./cloudflare");
 const SCHEMA = {
   type: "object",
   properties: {
-    preco_total: { type: "number" },   // R$ (apenas número)
-    area_util_m2: { type: "number" },
-    dormitorios: { type: "number" },
-    suites: { type: "number" },
-    vagas: { type: "number" },
-    bairro: { type: "string" },
-    condominio: { type: "string" },
-    endereco: { type: "string" },
+    preco_total:  { type: "string" },   // ex.: "720000" ou "R$ 720.000" — parseamos depois
+    area_util_m2: { type: "string" },   // ex.: "56" ou "56 m²"
+    suites:       { type: "string" },
+    vagas:        { type: "string" },
+    condominio:   { type: "string" },
   },
-  // sem `required`: o Workers AI da Cloudflare (modelo pequeno) retorna HTTP 422 quando
-  // exigimos campos que ele não consegue extrair (SPA não-hidratada, página ofuscada).
-  // Melhor amostra parcial (preço=0 vira "sob consulta") do que amostra zero.
+  // Sem `required` E todos `string`: o Workers AI da Cloudflare é pequeno e falhava
+  // (HTTP 422) com schema com number+required. String é o formato que ele mais acerta.
+  // bairro/endereco não vêm aqui — o `subject` já carrega isso do imóvel avaliado.
 };
 const PROMPT =
-  "Extraia os dados deste anúncio de apartamento à venda: preço total de venda em reais " +
-  "(somente número, sem R$ nem pontos), área útil/privativa em m², número de dormitórios, " +
-  "suítes e vagas de garagem, bairro, nome do condomínio/edifício e endereço (rua e número). " +
-  "Se algum campo não estiver visível na página, omita-o. NUNCA falhe — " +
-  "sempre devolva um JSON válido, ainda que parcial ou vazio.";
+  "Extraia deste anúncio de apartamento à venda, como strings: " +
+  "preco_total (preço de venda — só dígitos, ex.: '720000'), " +
+  "area_util_m2 (área útil/privativa — só dígitos, ex.: '56'), " +
+  "suites, vagas, condominio (nome do edifício). " +
+  "Se algum campo não estiver visível, omita. Sempre devolva um JSON válido.";
+
+// converte string com R$, pontos, vírgulas em número (e aceita number nativo também)
+const parseN = v => {
+  if (v == null || v === "") return 0;
+  if (typeof v === "number") return v;
+  const s = String(v).replace(/[^\d,.\-]/g, "").replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+};
 
 const norm = s => (s || "").toString().toLowerCase().normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
@@ -57,8 +63,10 @@ function classify(ext, subject = {}) {
 
 // PURA: converte a extração do CF num objeto `amostra` do contrato (testável sem rede)
 function mapExtraction(ext, url, subject = {}) {
-  const preco = Number(ext.preco_total) || 0;
-  const area = Number(ext.area_util_m2) || 0;
+  const preco  = parseN(ext.preco_total);
+  const area   = parseN(ext.area_util_m2);
+  const suites = parseN(ext.suites);
+  const vagas  = parseN(ext.vagas);
   const tipo = classify(ext, subject);
   const ref = refFromUrl(url);
   return {
@@ -66,10 +74,10 @@ function mapExtraction(ext, url, subject = {}) {
     nome: tipo === "mesmo_predio"
       ? `Mesmo prédio (${ref})`
       : (ext.condominio || `${ext.bairro || "Imóvel"} ${area ? Math.round(area) + "m²" : ""}`.trim()),
-    bairro: ext.bairro || "",
+    bairro: ext.bairro || subject.bairro || "",
     area: area ? `${Math.round(area)} m²` : "",
-    suites: ext.suites != null ? String(ext.suites) : "",
-    vagas: ext.vagas != null ? String(ext.vagas) : "",
+    suites: suites ? String(suites) : "",
+    vagas:  vagas  ? String(vagas)  : "",
     pedido: preco ? fmtMi(preco) : "sob consulta",
     valor: preco,
     valor_m2: (preco && area) ? fmtNum(preco / area) : "—",
