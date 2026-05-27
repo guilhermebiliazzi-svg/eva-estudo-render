@@ -82,8 +82,14 @@ async function extractAmostra(url, subject = {}, cf = {}) {
 
 // extrai vários links e devolve [avaliando, ...candidatos] (pronto p/ a aprovação)
 async function montarAmostras(avaliando, urls = [], subject = {}, cf = {}) {
-  const out = [avaliando];
-  for (const u of urls) {
+  const out = [];
+  // só entra na lista se vier amostra-shaped (objeto). Sem avaliando, segue sem crashar.
+  if (avaliando && typeof avaliando === "object") {
+    out.push({ ...avaliando, tipo: avaliando.tipo || "avaliando" });
+  }
+  const list = Array.isArray(urls) ? urls : [];
+  for (const u of list) {
+    if (!u) continue;
     try { out.push(await extractAmostra(u, subject, cf)); }
     catch (e) { out.push({ tipo: "comparavel", nome: "(falha ao ler anúncio)", link: u, _erro: String(e.message || e) }); }
   }
@@ -92,7 +98,8 @@ async function montarAmostras(avaliando, urls = [], subject = {}, cf = {}) {
 
 // mensagem de aprovação pro WhatsApp (o "gate" antes de entrar no estudo)
 function montarAprovacao(amostras = []) {
-  const cand = amostras.filter(a => a.tipo !== "avaliando");
+  const cand = (Array.isArray(amostras) ? amostras : [])
+    .filter(a => a && a.tipo !== "avaliando");
   let txt = "Encontrei estas amostras para o estudo. Confirme, remova ou me mande outros links:\n";
   cand.forEach((a, i) => {
     txt += `\n${i + 1}. ${a.nome} — ${a.area || "?"}, ${a.suites || "?"} suítes, ${a.vagas || "?"} vagas — ${a.pedido}` +
