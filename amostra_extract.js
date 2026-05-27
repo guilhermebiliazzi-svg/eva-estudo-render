@@ -22,13 +22,16 @@ const SCHEMA = {
     condominio: { type: "string" },
     endereco: { type: "string" },
   },
-  required: ["preco_total", "area_util_m2"],
+  // sem `required`: o Workers AI da Cloudflare (modelo pequeno) retorna HTTP 422 quando
+  // exigimos campos que ele não consegue extrair (SPA não-hidratada, página ofuscada).
+  // Melhor amostra parcial (preço=0 vira "sob consulta") do que amostra zero.
 };
 const PROMPT =
   "Extraia os dados deste anúncio de apartamento à venda: preço total de venda em reais " +
   "(somente número, sem R$ nem pontos), área útil/privativa em m², número de dormitórios, " +
   "suítes e vagas de garagem, bairro, nome do condomínio/edifício e endereço (rua e número). " +
-  "Se algum campo não existir no anúncio, omita-o.";
+  "Se algum campo não estiver visível na página, omita-o. NUNCA falhe — " +
+  "sempre devolva um JSON válido, ainda que parcial ou vazio.";
 
 const norm = s => (s || "").toString().toLowerCase().normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
