@@ -32,9 +32,11 @@ function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
 const roundTo = (v, step) => Math.round(v/step)*step;
 const floorTo = (v, step) => Math.floor(v/step)*step;
 const decs    = v => (v/1e6) < 10 ? 2 : 1;   // <R$10mi: 2 casas; senão 1
-// 1.43e6 -> "R$ 1,43 milhões" | 13.8e6 -> "R$ 13,8 milhões"
-const milhoes = v => "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " milhões";
-const mi      = v => "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " mi";
+const milhar  = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+const reaisN  = v => milhar(Math.round(Number(v)/1000)*1000) + ",00"; // arredonda p/ milhar: "461.000,00"
+const reais   = v => "R$ " + reaisN(v);                               // < R$1mi: "R$ 461.000,00"
+const milhoes = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " milhões";
+const mi      = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " mi";
 const pct     = f => "+" + ((f-1)*100).toFixed(1).replace(".", ",") + "%";
 
 function parseDataBR(d){ // "19/12/2023" ou Date/ISO -> {ano,mes}
@@ -50,9 +52,19 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const anoRef    = ref?.ano ?? hoje.getFullYear();
   const mesRef    = ref?.mes ?? (hoje.getMonth()+1);
 
-  // 1) âncora = venda real mais recente do mesmo prédio
-  const anchor = vendidos.find(v => v.ancora) ||
-    [...vendidos].sort((a,b)=> (parseDataBR(b.data).ano*12+parseDataBR(b.data).mes) - (parseDataBR(a.data).ano*12+parseDataBR(a.data).mes))[0];
+  // 1) âncora = venda real mais recente do mesmo prédio — porém de APARTAMENTO.
+  //    Vaga avulsa NUNCA ancora (uma vaga não precifica um apê). As vagas continuam
+  //    no conjunto/tabela (o corretor correlaciona pela data); só não viram âncora.
+  const ehVagaAvulsa = v => {
+    const u = String(v.unidade || "").trim();
+    const a = Number(v.area_m2 ?? v.area ?? 0);
+    return /^(VG|VAGA|BOX)\b/i.test(u) || (a > 0 && a < 30);
+  };
+  const aptos = vendidos.filter(v => !ehVagaAvulsa(v));
+  const pool  = aptos.length ? aptos : vendidos; // fallback raro: só houver vaga
+  const dKey  = v => parseDataBR(v.data).ano*12 + parseDataBR(v.data).mes;
+  const anchor = pool.find(v => v.is_ancora === true || v.ancora === true) ||
+    [...pool].sort((a,b)=> dKey(b) - dKey(a))[0];
   const aV = Number(anchor.valor);
   const aD = parseDataBR(anchor.data);
 
@@ -94,7 +106,9 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     ancora_curto: ancoraCurto,
     ipca_pct: pct(fator),
     valor_mercado: milhoes(valorMerc),
-    faixa: `R$ ${(faixaMin/1e6).toFixed(decs(faixaMin)).replace(".",",")} a ${(faixaMax/1e6).toFixed(decs(faixaMax)).replace(".",",")} milhões`,
+    faixa: (faixaMin >= 1e6 && faixaMax >= 1e6)
+      ? `R$ ${(faixaMin/1e6).toFixed(decs(faixaMin)).replace(".",",")} a ${(faixaMax/1e6).toFixed(decs(faixaMax)).replace(".",",")} milhões`
+      : `${reais(faixaMin)} a ${reaisN(faixaMax)}`,
     anuncio_sugerido: milhoes(anuncio),
     anuncio_sub: `alinhado ao concorrente direto · fechamento esperado ~${mi(fechamento)}`,
     conclusao_apoio: `Ancorado na venda real do próprio prédio (ITBI) e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(anuncio)}).`,

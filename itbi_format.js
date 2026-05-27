@@ -6,7 +6,11 @@
  *
  * Espera linhas com: { data, unidade, area_m2, valor, valor_m2, is_ancora }
  */
-const fmtMi  = v => "R$ " + (Number(v) / 1e6).toFixed(2).replace(".", ",") + " mi"; // 7400000 -> "R$ 7,40 mi"
+const milhar = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+// >= R$1mi: "R$ 7,40 mi"  ·  < R$1mi: "R$ 470.000,00"
+const fmtMi  = v => Number(v) < 1e6
+  ? "R$ " + milhar(Math.round(Number(v)/1000)*1000) + ",00"
+  : "R$ " + (Number(v) / 1e6).toFixed(2).replace(".", ",") + " mi";
 const fmtM2  = a => Math.round(Number(a)) + " m²";                                  // 743 -> "743 m²"
 const fmtNum = n => Math.round(Number(n)).toLocaleString("pt-BR");                  // 9959.62 -> "9.960"
 const fmtDate = d => {                                                              // Date/ISO -> "dd/mm/aaaa"

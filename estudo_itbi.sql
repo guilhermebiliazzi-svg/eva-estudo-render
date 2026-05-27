@@ -1,13 +1,12 @@
 -- =====================================================================
 -- EVA · Estudo de Mercado — Camada de dados ITBI (passo C)
--- Validado contra a base real: retorna as 6 vendas do Marquise
--- (R$ 7,40 mi/2018 → R$ 13,80 mi/2023), âncora detectada sozinha.
---
 -- Tabela no Supabase: vendidos_itbi_usados
 -- building_key tem o formato 'LOGRADOURO|NUMERO|CEP'
 --   ex.: 'R HERMANO RIBEIRO DA SILVA|155|4008080'
--- No n8n: node Postgres → "Query Parameters" preenche $1, $2, $3.
--- A saída crua vira o bloco "vendidos" do contrato via itbi_format.js.
+--
+-- NOTA: NADA é excluído — vagas continuam na saída (o corretor correlaciona
+-- pela data). O is_ancora marca UMA linha: o APARTAMENTO mais recente
+-- (nunca uma vaga avulsa). Mesma lógica do db.js do serviço de render.
 -- =====================================================================
 
 
@@ -24,16 +23,21 @@ WITH base AS (
   WHERE building_key = $1
     AND valor_transacao::numeric > 0
     AND area_construida::numeric  > 0
+),
+flagged AS (
+  SELECT *,
+    ( area_m2 >= 30
+      AND (unidade IS NULL OR unidade !~* '^(VG|VAGA|BOX)([^A-Za-z]|$)') ) AS is_apto
+  FROM base
 )
-SELECT
-  data, unidade, area_m2, valor, valor_m2,
-  (data = max(data) OVER ()) AS is_ancora   -- âncora = venda mais recente
-FROM base
+SELECT data, unidade, area_m2, valor, valor_m2,
+       (ROW_NUMBER() OVER (ORDER BY is_apto DESC, data DESC, valor DESC) = 1) AS is_ancora
+FROM flagged
 ORDER BY data ASC;
 
 
 -- (C1b) Mesmo prédio A PARTIR DO ENDEREÇO (quando não se tem o building_key)
--- $1 = trecho do logradouro já normalizado (maiúsc., sem acento), ex.: 'HERMANO RIBEIRO'
+-- $1 = trecho do logradouro normalizado (maiúsc., sem acento), ex.: 'HERMANO RIBEIRO'
 -- $2 = numero, ex.: '155'
 WITH base AS (
   SELECT
@@ -47,10 +51,16 @@ WITH base AS (
     AND numero::text = $2
     AND valor_transacao::numeric > 0
     AND area_construida::numeric  > 0
+),
+flagged AS (
+  SELECT *,
+    ( area_m2 >= 30
+      AND (unidade IS NULL OR unidade !~* '^(VG|VAGA|BOX)([^A-Za-z]|$)') ) AS is_apto
+  FROM base
 )
 SELECT data, unidade, area_m2, valor, valor_m2,
-       (data = max(data) OVER ()) AS is_ancora
-FROM base
+       (ROW_NUMBER() OVER (ORDER BY is_apto DESC, data DESC, valor DESC) = 1) AS is_ancora
+FROM flagged
 ORDER BY data ASC;
 
 

@@ -2,14 +2,11 @@
  * EVA · acesso ao Postgres/Supabase — busca os vendidos do mesmo prédio (query C1).
  * `pg` é carregado sob demanda pra não obrigar a dependência no caminho puro/teste.
  *
- * Filtros (NÃO comparar apê com vaga/box — senão a âncora cai numa vaga):
- *  - area_construida >= MIN_AREA_M2  → vagas/boxes (~20 m²) ficam de fora;
- *  - complemento não começa com VG / VAGA / BOX.
- * Âncora: exatamente UMA linha — a venda mais recente (desempate pelo maior valor),
- *  evitando o caso de várias transações na mesma data marcarem todas como âncora.
+ * IMPORTANTE: traz TODAS as linhas (apês E vagas) — as vagas têm que aparecer na
+ * tabela pro corretor correlacionar pela data. NADA é excluído aqui.
+ * O `is_ancora` marca UMA linha: o APARTAMENTO mais recente (nunca uma vaga avulsa),
+ * pra valoração e o destaque do slide não caírem numa vaga.
  */
-const MIN_AREA_M2 = 30; // piso p/ excluir vaga/box; suba/baixe se o prédio tiver kitnets < 30 m²
-
 const SQL = `
 WITH base AS (
   SELECT
@@ -21,13 +18,18 @@ WITH base AS (
   FROM vendidos_itbi_usados
   WHERE building_key = $1
     AND valor_transacao::numeric > 0
-    AND area_construida::numeric >= ${MIN_AREA_M2}
-    AND ( complemento IS NULL
-          OR btrim(complemento) !~* '^(VG|VAGA|BOX)([^A-Za-z]|$)' )
+    AND area_construida::numeric  > 0
+),
+flagged AS (
+  SELECT *,
+    -- "é apartamento" (não vaga/box avulsa): usado só p/ ESCOLHER a âncora; nada é excluído
+    ( area_m2 >= 30
+      AND (unidade IS NULL OR unidade !~* '^(VG|VAGA|BOX)([^A-Za-z]|$)') ) AS is_apto
+  FROM base
 )
 SELECT data, unidade, area_m2, valor, valor_m2,
-       (ROW_NUMBER() OVER (ORDER BY data DESC, valor DESC) = 1) AS is_ancora
-FROM base
+       ( ROW_NUMBER() OVER (ORDER BY is_apto DESC, data DESC, valor DESC) = 1 ) AS is_ancora
+FROM flagged
 ORDER BY data ASC;`;
 
 // pool = instância de pg.Pool ; buildingKey = 'LOGRADOURO|NUMERO|CEP'
