@@ -50,7 +50,20 @@ app.post("/amostras", async (req, res) => {
     const { montarAmostras, montarAprovacao } = require("./amostra_extract");
     const { saveAmostras } = require("./amostras_store");
     const { avaliando, urls, subject, phone } = req.body || {};
-    const amostras = await montarAmostras(avaliando, urls || [], subject || {});
+    // urls pode vir como string JSON (n8n $fromAI 'string'), string com URLs separadas por nova-linha/vírgula,
+    // ou array. Normaliza tudo pra array antes de processar.
+    let urlList = urls;
+    if (typeof urls === "string") {
+      const t = urls.trim();
+      if (t.startsWith("[")) {
+        try { urlList = JSON.parse(t); }
+        catch { urlList = t.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean); }
+      } else {
+        urlList = t.split(/[\n,;]+/).map(s => s.trim()).filter(s => /^https?:\/\//.test(s));
+      }
+    }
+    if (!Array.isArray(urlList)) urlList = [];
+    const amostras = await montarAmostras(avaliando, urlList, subject || {});
     // persistência: agente costuma "esquecer" de repassar amostras no Gerar_Estudo_Mercado.
     // se o caller passar phone, salvamos por sessão; /estudo recupera quando amostras vier vazio.
     if (phone && pool) {
