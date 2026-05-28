@@ -203,16 +203,32 @@ function buildEstudo(data, opts={}){
   // ===== SLIDE 8 — O IMÓVEL =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"07 · O Imóvel"); title(s,"O imóvel avaliado");
-    if(im.foto_interior) s.addImage({path:im.foto_interior,x:MX,y:1.7,w:4.55,h:3.0,sizing:{type:"cover",w:4.55,h:3.0}});
-    s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:4.55,h:3.0,fill:{type:"none"},line:{color:LINE,width:1}});
+    if(im.foto_interior) {
+      s.addImage({path:im.foto_interior,x:MX,y:1.7,w:4.55,h:3.0,sizing:{type:"cover",w:4.55,h:3.0}});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:4.55,h:3.0,fill:{type:"none"},line:{color:LINE,width:1}});
+    } else {
+      // sem foto: placeholder estilizado com o endereço e o predio_curto, em vez de caixa cinza vazia
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:4.55,h:3.0,fill:{color:NAVY},line:{type:"none"}});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:0.09,h:3.0,fill:{color:RED},line:{type:"none"}});
+      s.addText("IMÓVEL AVALIADO",{x:MX+0.35,y:1.95,w:4.0,h:0.3,fontFace:BODY,fontSize:10,color:ICE,bold:true,charSpacing:2,margin:0});
+      s.addText(im.predio_curto||im.titulo||"Endereço informado pelo corretor",
+        {x:MX+0.35,y:2.3,w:4.0,h:1.4,fontFace:HEAD,fontSize:22,color:WHITE,bold:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+      if(im.subtitulo) s.addText(im.subtitulo,{x:MX+0.35,y:3.85,w:4.0,h:0.5,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"top",margin:0});
+    }
     const tx=5.4, tw=4.05; let yy=1.7;
     const ficha = im.ficha||[];
-    ficha.forEach((r,i)=>{
-      s.addText(String(r[0]).toUpperCase(),{x:tx,y:yy,w:1.45,h:0.36,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:0.5,align:"left",valign:"middle",margin:0});
-      s.addText(String(r[1]),{x:tx+1.45,y:yy,w:tw-1.45,h:0.36,fontFace:BODY,fontSize:12,color:INK,bold:true,align:"left",valign:"middle",margin:0});
-      if(i<ficha.length-1) s.addShape(p.shapes.LINE,{x:tx,y:yy+0.375,w:tw,h:0,line:{color:LINE,width:0.75}});
-      yy+=0.385;
-    });
+    if(ficha.length === 0) {
+      // sem ficha estruturada: nota discreta em vez de área em branco
+      s.addText("Ficha técnica não fornecida pelo corretor.",
+        {x:tx,y:yy+1.3,w:tw,h:0.4,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    } else {
+      ficha.forEach((r,i)=>{
+        s.addText(String(r[0]).toUpperCase(),{x:tx,y:yy,w:1.45,h:0.36,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:0.5,align:"left",valign:"middle",margin:0});
+        s.addText(String(r[1]),{x:tx+1.45,y:yy,w:tw-1.45,h:0.36,fontFace:BODY,fontSize:12,color:INK,bold:true,align:"left",valign:"middle",margin:0});
+        if(i<ficha.length-1) s.addShape(p.shapes.LINE,{x:tx,y:yy+0.375,w:tw,h:0,line:{color:LINE,width:0.75}});
+        yy+=0.385;
+      });
+    }
     footer(s,8);
   }
 
@@ -331,9 +347,15 @@ function buildEstudo(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"11 · Pedido × Fechado"); title(s,"O ajuste no tempo e a depreciação");
     const cw=4.35, ch=1.4, y0=1.75;
+    // distingue concorrente real de teto calculado — sem inventar "anúncio" inexistente
+    const concRealAd = val.concorrente_origem === "anuncio";
+    const concEyebrow = concRealAd ? "CONCORRENTE DIRETO · MESMO PRÉDIO" : "TETO CALCULADO · IPCA";
+    const concBullet  = concRealAd
+      ? `Concorrente direto no mesmo prédio anunciado por ${val.concorrente_valor||""} — teto prático do anúncio.`
+      : `Teto pela correção monetária da última venda real: ${val.concorrente_valor||""} (âncora × IPCA).`;
     s.addShape(p.shapes.RECTANGLE,{x:MX,y:y0,w:cw,h:ch,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
     s.addShape(p.shapes.RECTANGLE,{x:MX,y:y0,w:0.09,h:ch,fill:{color:RED},line:{type:"none"}});
-    s.addText("CONCORRENTE DIRETO · MESMO PRÉDIO",{x:MX+0.28,y:y0+0.2,w:cw-0.45,h:0.3,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:1,margin:0});
+    s.addText(concEyebrow,{x:MX+0.28,y:y0+0.2,w:cw-0.45,h:0.3,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:1,margin:0});
     s.addText([{text:val.concorrente_valor||"",options:{fontSize:23,bold:true,color:NAVY,breakLine:true}},
       {text:val.concorrente_label||"",options:{fontSize:11.5,color:INK}}],
       {x:MX+0.28,y:y0+0.55,w:cw-0.45,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
@@ -346,9 +368,11 @@ function buildEstudo(data, opts={}){
     s.addText("COMO AJUSTAMOS",{x:MX,y:3.45,w:5,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
     const bul=(t)=>({text:t,options:{bullet:{code:"2022"},color:INK,breakLine:true}});
     s.addText([
-      bul(`Concorrente direto no mesmo prédio anunciado por ${val.concorrente_valor||""} — teto prático do anúncio.`),
+      bul(concBullet),
       bul(`Última venda real do prédio: ${val.ancora_valor||""} (${val.ancora_curto||""}) — base do valor de mercado.`),
-      bul("Não se anuncia acima de uma unidade equivalente já disponível no mesmo condomínio."),
+      bul(concRealAd
+        ? "Não se anuncia acima de uma unidade equivalente já disponível no mesmo condomínio."
+        : "Sem concorrente direto no condomínio — ajuste se ancora apenas na venda real corrigida."),
       {text:"Depreciação e platô do ciclo de vida reforçam o ajuste — projeção capada, sem extrapolar o boom.",options:{bullet:{code:"2022"},color:INK}},
     ],{x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
     footer(s,12);

@@ -100,7 +100,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     concorrente_valor: concorrente ? milhoes(Number(concorrente.valor)) : milhoes(anuncio),
     concorrente_label: concorrente
       ? `unidade equivalente${concorrente.vagas?`, ${concorrente.vagas} vagas`:""}, já anunciada`
-      : "anúncio equivalente no mesmo prédio",
+      : `teto pela correção monetária · IPCA ${pct(fator)}`,
+    concorrente_origem: concorrente ? "anuncio" : "calculado",
     ancora_valor: milhoes(aV),
     ancora_label: `${ancoraCurto} · mesmo prédio${vagasAnchor?` · ${vagasAnchor} vagas`:""}`,
     ancora_curto: ancoraCurto,
