@@ -10,7 +10,7 @@
  * Fotos do imóvel/corretor vêm por caminho/URL dentro de `data`.
  */
 const pptxgen = require("pptxgenjs");
-const { vendidosFromRows } = require("./itbi_format");
+const { vendidosAggregatedFromRows } = require("./itbi_format");
 
 const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
       INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
@@ -19,12 +19,13 @@ const HEAD="Georgia", BODY="Calibri";
 const H=5.625, MX=0.55;
 
 function buildEstudo(data, opts={}){
-  // BLINDAGEM: se vendidos vier cru do SQL (valor numérico / campo area_m2 / is_ancora),
-  // formata aqui mesmo. Idempotente: linhas já formatadas (valor string) passam intactas.
-  // Sem isso, {text: de.valor} com número quebra o pptxgenjs ("itext.text.includes is not a function").
+  // BLINDAGEM + AGREGAÇÃO: se vendidos vier cru do SQL (valor numérico / campo area_m2 / is_ancora),
+  // AGREGA por data (apto + vagas mesmo dia somados em 1 linha) e formata. Idempotente: linhas
+  // já formatadas/agregadas (valor string) passam intactas. Sem isso, vagas avulsas aparecem como
+  // linhas separadas no slide e distorcem a "tendência" (R$ 115k vaga 2019 vs R$ 440k apto 2025).
   if (Array.isArray(data.vendidos) && data.vendidos.length &&
       (typeof data.vendidos[0].valor === "number" || "area_m2" in data.vendidos[0] || "is_ancora" in data.vendidos[0])) {
-    data.vendidos = vendidosFromRows(data.vendidos);
+    data.vendidos = vendidosAggregatedFromRows(data.vendidos);
   }
   const A = (opts.assets || ".").replace(/\/$/,"") + "/";
   const out = opts.out || "Estudo_Mercado.pptx";

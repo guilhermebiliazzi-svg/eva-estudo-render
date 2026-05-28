@@ -42,4 +42,48 @@ function vendidosFromRows(rows) {
   });
 }
 
-module.exports = { vendidosFromRows, fmtMi, fmtM2, fmtNum, fmtDate, cleanUnidade };
+// detecta vaga avulsa pelo prefixo da unidade (mesmo critério da valoracao.js)
+const isVaga = u => /^(VG|VAGA|BOX)\b/i.test(String(u || "").trim());
+
+// agrega linhas CRUAS por data: apto + vagas do mesmo dia viram 1 linha com valor total.
+// Dias só de vagas (sem apto) são descartados. Útil quando o ITBI registra apto e
+// vagas avulsas como transações separadas — caso comum em prédios novos / paulistas.
+// Resultado: cada linha = 1 transação completa, comparável e coerente para o estudo.
+function aggregateByDate(rawRows) {
+  const byKey = new Map();
+  for (const r of (rawRows || [])) {
+    const key = String(r.data instanceof Date ? r.data.toISOString().slice(0, 10) : r.data);
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
+  }
+  const out = [];
+  for (const [, rows] of byKey) {
+    const aptos = rows.filter(r => !isVaga(r.unidade));
+    const vagas = rows.filter(r =>  isVaga(r.unidade));
+    if (aptos.length === 0) continue; // só vagas no dia → ignora (não é venda de unidade)
+    const apto = aptos[0]; // 1 apto por dia é o caso dominante em prédios pequenos
+    const vagasValor = vagas.reduce((s, v) => s + Number(v.valor || 0), 0);
+    const valorTotal = Number(apto.valor || 0) + vagasValor;
+    const aptoArea = Number(apto.area_m2 || 0);
+    out.push({
+      data: apto.data,
+      unidade: vagas.length > 0
+        ? `${apto.unidade} + ${vagas.length} vaga${vagas.length > 1 ? "s" : ""}`
+        : apto.unidade,
+      area_m2: aptoArea,
+      valor: valorTotal,
+      valor_m2: aptoArea > 0 ? valorTotal / aptoArea : 0,
+      is_ancora: rows.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1),
+    });
+  }
+  // ordena por data ASC (mesma ordem que o SQL C1 produz)
+  out.sort((a, b) => new Date(a.data) - new Date(b.data));
+  return out;
+}
+
+// agregar + formatar em uma chamada (uso conveniente no gerador)
+function vendidosAggregatedFromRows(rawRows) {
+  return vendidosFromRows(aggregateByDate(rawRows));
+}
+
+module.exports = { vendidosFromRows, vendidosAggregatedFromRows, aggregateByDate, isVaga, fmtMi, fmtM2, fmtNum, fmtDate, cleanUnidade };
