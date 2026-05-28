@@ -200,33 +200,33 @@ function buildEstudo(data, opts={}){
     footer(s,7);
   }
 
-  // ===== SLIDE 8 — O IMÓVEL =====
+  // ===== SLIDE 8 — O IMÓVEL — grade dupla label/value (gold standard) =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"07 · O Imóvel"); title(s,"O imóvel avaliado");
-    if(im.foto_interior) {
-      s.addImage({path:im.foto_interior,x:MX,y:1.7,w:4.55,h:3.0,sizing:{type:"cover",w:4.55,h:3.0}});
-      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:4.55,h:3.0,fill:{type:"none"},line:{color:LINE,width:1}});
-    } else {
-      // sem foto: placeholder estilizado com o endereço e o predio_curto, em vez de caixa cinza vazia
-      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:4.55,h:3.0,fill:{color:NAVY},line:{type:"none"}});
-      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:0.09,h:3.0,fill:{color:RED},line:{type:"none"}});
-      s.addText("IMÓVEL AVALIADO",{x:MX+0.35,y:1.95,w:4.0,h:0.3,fontFace:BODY,fontSize:10,color:ICE,bold:true,charSpacing:2,margin:0});
-      s.addText(im.predio_curto||im.titulo||"Endereço informado pelo corretor",
-        {x:MX+0.35,y:2.3,w:4.0,h:1.4,fontFace:HEAD,fontSize:22,color:WHITE,bold:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-      if(im.subtitulo) s.addText(im.subtitulo,{x:MX+0.35,y:3.85,w:4.0,h:0.5,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"top",margin:0});
-    }
-    const tx=5.4, tw=4.05; let yy=1.7;
-    const ficha = im.ficha||[];
-    if(ficha.length === 0) {
-      // sem ficha estruturada: nota discreta em vez de área em branco
+    const ficha = Array.isArray(im.ficha) ? im.ficha : [];
+    // grade 2 colunas × N linhas: 1 par (label/valor) por célula
+    // áreas: x começa em MX (col esq) e MX + colW + gap (col dir); y começa em 1.85
+    const gridX = MX, gridY = 1.85;
+    const colW  = 4.35, gap = 0.2, rowH = 0.95;
+    const labelH = 0.30, valueH = 0.55;
+    if (ficha.length === 0) {
       s.addText("Ficha técnica não fornecida pelo corretor.",
-        {x:tx,y:yy+1.3,w:tw,h:0.4,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+        {x:gridX,y:gridY+0.3,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     } else {
-      ficha.forEach((r,i)=>{
-        s.addText(String(r[0]).toUpperCase(),{x:tx,y:yy,w:1.45,h:0.36,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:0.5,align:"left",valign:"middle",margin:0});
-        s.addText(String(r[1]),{x:tx+1.45,y:yy,w:tw-1.45,h:0.36,fontFace:BODY,fontSize:12,color:INK,bold:true,align:"left",valign:"middle",margin:0});
-        if(i<ficha.length-1) s.addShape(p.shapes.LINE,{x:tx,y:yy+0.375,w:tw,h:0,line:{color:LINE,width:0.75}});
-        yy+=0.385;
+      ficha.forEach((par, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const x = gridX + col * (colW + gap);
+        const y = gridY + row * rowH;
+        // label (eyebrow vermelho pequeno)
+        s.addText(String(par[0]||"").toUpperCase(),
+          {x, y, w:colW, h:labelH, fontFace:BODY, fontSize:10, color:RED, bold:true, charSpacing:1.5, align:"left", valign:"top", margin:0});
+        // valor (navy bold serif)
+        s.addText(String(par[1]||""),
+          {x, y:y+labelH, w:colW, h:valueH, fontFace:HEAD, fontSize:17, color:NAVY, bold:true, align:"left", valign:"top", margin:0, lineSpacingMultiple:1.05});
+        // hairline separador (exceto última linha)
+        const lastRow = Math.floor((ficha.length-1)/2);
+        if (row < lastRow) s.addShape(p.shapes.LINE,{x, y:y+rowH-0.05, w:colW, h:0, line:{color:LINE,width:0.5}});
       });
     }
     footer(s,8);
