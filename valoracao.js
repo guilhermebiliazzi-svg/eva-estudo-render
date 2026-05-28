@@ -62,6 +62,15 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   };
   const aptos = vendidos.filter(v => !ehVagaAvulsa(v));
   const pool  = aptos.length ? aptos : vendidos; // fallback raro: só houver vaga
+  // Guard: sem nada no pool → mensagem clara em vez de "Cannot read properties of undefined (reading 'valor')"
+  if (!pool.length) {
+    const err = new Error(
+      "Nenhuma venda registrada no ITBI para este endereço. " +
+      "Verifique se o número e CEP estão corretos, ou se o prédio existe na base ITBI consolidada."
+    );
+    err.code = "NO_ITBI_DATA";
+    throw err;
+  }
   const dKey  = v => parseDataBR(v.data).ano*12 + parseDataBR(v.data).mes;
   const anchor = pool.find(v => v.is_ancora === true || v.ancora === true) ||
     [...pool].sort((a,b)=> dKey(b) - dKey(a))[0];
