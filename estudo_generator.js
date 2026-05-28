@@ -331,15 +331,25 @@ function buildEstudo(data, opts={}){
     const predio=im.predio_curto||"imóvel";
     const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
     const vend=data.vendidos||[]; const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
+    // guard: só afirma "está entrando no platô" quando a idade é conhecida.
+    // sem idade, o terceiro parágrafo vira contextual (não inventa estágio do ciclo).
+    const terceiroParag = (im.idade_anos != null)
+      ? `O ${predio}${idadeTxt} está entrando no platô — por isso projetar o boom para a frente seria um erro.`
+      : `Em prédios com histórico de venda forte como este, a fase do ciclo importa: o boom não se projeta linearmente para a frente.`;
     s.addText([
       {text:"O valor de um imóvel é terreno (valoriza) + construção (deprecia).",options:{color:INK,breakLine:true,bold:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
       {text:"O total sobe nos primeiros anos, atinge um platô e depois cede em termos reais.",options:{color:INK,breakLine:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
-      {text:`O ${predio}${idadeTxt} está entrando no platô — por isso projetar o boom para a frente seria um erro.`,options:{color:INK}},
+      {text:terceiroParag,options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
-    s.addText(`A tabela do ITBI confirma: ${de.valor||""} (${yearOf(de.data)}) → ${ate.valor||""} (${yearOf(ate.data)}).`,
-      {x:MX,y:4.85,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
+    // rodapé: só monta "R$X (ano) → R$Y (ano)" quando temos AMBAS as pontas com VALOR e DATA reais.
+    // sem isso, não monta a sentença (em vez de "(undefined) → (undefined)").
+    const temPontas = de && de.valor && de.data && ate && ate.valor && ate.data;
+    if (temPontas) {
+      s.addText(`A tabela do ITBI confirma: ${de.valor} (${yearOf(de.data)}) → ${ate.valor} (${yearOf(ate.data)}).`,
+        {x:MX,y:4.85,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
+    }
     footer(s,11);
   }
 
