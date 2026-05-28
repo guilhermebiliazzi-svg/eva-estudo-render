@@ -1,36 +1,36 @@
 /**
  * EVA · passo F — amostras (anúncios ativos).
- * Dado o link de um anúncio, o Cloudflare Browser Rendering (/json) abre a página
- * (mesmo SPA), extrai os campos e a gente monta o objeto `amostra` do contrato.
+ * Lê o link do anúncio via r.jina.ai (que renderiza SPAs e devolve markdown
+ * limpo), extrai os campos com regex e monta o objeto `amostra` do contrato.
  * Classifica como "mesmo_predio" quando bate com o prédio do avaliando.
  *
+ * HISTÓRICO: a versão anterior usava Cloudflare Browser Rendering (/json)
+ * com Workers AI, que retornava HTTP 422 em SPAs pesadas como o QuintoAndar
+ * mesmo com schema simplificado. r.jina.ai já é o que o Ler_Link_Imovel
+ * usa e comprovadamente lê QuintoAndar/Zap/Viva sem problema.
+ *
  *   const { extractAmostra, montarAmostras, montarAprovacao } = require("./amostra_extract");
- *   const cand = await montarAmostras(avaliando, urls, subject, { accountId, apiToken });
+ *   const cand = await montarAmostras(avaliando, urls, subject);
  *   // -> manda `montarAprovacao(cand)` no WhatsApp; após aprovar, vira data.amostras
+ *
+ * ENV: JINA_API_KEY (token Bearer pra r.jina.ai — mesmo do Ler_Link_Imovel).
  */
-const { cfJson } = require("./cloudflare");
 
-const SCHEMA = {
-  type: "object",
-  properties: {
-    preco_total:  { type: "string" },   // ex.: "720000" ou "R$ 720.000" — parseamos depois
-    area_util_m2: { type: "string" },   // ex.: "56" ou "56 m²"
-    suites:       { type: "string" },
-    vagas:        { type: "string" },
-    condominio:   { type: "string" },
-  },
-  // Sem `required` E todos `string`: o Workers AI da Cloudflare é pequeno e falhava
-  // (HTTP 422) com schema com number+required. String é o formato que ele mais acerta.
-  // bairro/endereco não vêm aqui — o `subject` já carrega isso do imóvel avaliado.
-};
-const PROMPT =
-  "Extraia deste anúncio de apartamento à venda, como strings: " +
-  "preco_total (preço de venda — só dígitos, ex.: '720000'), " +
-  "area_util_m2 (área útil/privativa — só dígitos, ex.: '56'), " +
-  "suites, vagas, condominio (nome do edifício). " +
-  "Se algum campo não estiver visível, omita. Sempre devolva um JSON válido.";
+const JINA_BASE = "https://r.jina.ai/";
 
-// converte string com R$, pontos, vírgulas em número (e aceita number nativo também)
+// --- fetch markdown via Jina (SPA-ready) ---
+async function fetchJinaMarkdown(url) {
+  const apiKey = process.env.JINA_API_KEY;
+  const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  const resp = await fetch(JINA_BASE + url, { headers });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Jina ${resp.status}: ${body.slice(0, 200)}`);
+  }
+  return await resp.text();
+}
+
+// --- helpers numéricos / texto ---
 const parseN = v => {
   if (v == null || v === "") return 0;
   if (typeof v === "number") return v;
@@ -50,6 +50,55 @@ function refFromUrl(u) {
   catch { return "ANÚNCIO"; }
 }
 
+// --- EXTRAÇÃO POR REGEX DO MARKDOWN DA JINA ---
+// QuintoAndar/Zap/Viva via Jina vêm com texto como:
+//   "Valor: R$720.000\n56 m²\n1 quarto, 1 suíte\n2 vagas\nCondomínio: R$2.530\nIPTU: R$393/mês"
+// Estratégia:
+//   - preço de venda = MAIOR R$ na página (afasta condomínio/IPTU que são menores)
+//   - área útil = primeira ocorrência de "<n> m²"
+//   - suítes/vagas = "<n> suíte/vaga"
+//   - endereço = padrão "Rua/Av./Alameda <nome>, <num>"
+function extractFromMarkdown(md) {
+  const ext = {};
+
+  // 1) PREÇO — o maior R$ vence (preço > condomínio > IPTU)
+  const monies = [...md.matchAll(/R\$\s*([\d][\d.,]*)/g)]
+    .map(m => parseN(m[1]))
+    .filter(n => n > 1000); // descarta valores muito pequenos (provavelmente não é preço)
+  if (monies.length) ext.preco_total = String(Math.max(...monies));
+
+  // 2) ÁREA ÚTIL — primeira ocorrência de "<n> m²" (² não é word char, então sem \b)
+  const areaMatch = md.match(/(\d{2,4}(?:[.,]\d+)?)\s*m[²2]/i);
+  if (areaMatch) ext.area_util_m2 = areaMatch[1].replace(",", ".");
+
+  // 3) SUÍTES
+  const suitesMatch = md.match(/(\d+)\s*su[íi]te/i);
+  if (suitesMatch) ext.suites = suitesMatch[1];
+
+  // 4) VAGAS
+  const vagasMatch = md.match(/(\d+)\s*vaga/i);
+  if (vagasMatch) ext.vagas = vagasMatch[1];
+
+  // 5) ENDEREÇO — tenta primeiro com número (mais útil pra mesmo_predio); senão, sem número.
+  let endMatch = md.match(/\b(Rua|Av(?:enida)?\.?|Alameda|Al\.|Travessa|Pra[çc]a)\s+([^\n,]{3,60}?),\s*(\d{1,5})\b/i);
+  if (endMatch) {
+    ext.endereco = `${endMatch[1]} ${endMatch[2].trim()}, ${endMatch[3]}`;
+  } else {
+    endMatch = md.match(/\b(Rua|Av(?:enida)?\.?|Alameda|Al\.|Travessa|Pra[çc]a)\s+([^\n,]{3,60})/i);
+    if (endMatch) ext.endereco = `${endMatch[1]} ${endMatch[2].trim()}`;
+  }
+
+  // 6) CONDOMÍNIO/EDIFÍCIO — tenta padrões "Edifício/Cond. <Nome>" (mais raro no QuintoAndar)
+  const condMatch = md.match(/(?:Edif[íi]cio|Cond[oô]m[íi]nio)\s+([A-Z][\w\s.'-]{2,40})/);
+  if (condMatch && !condMatch[1].match(/^R\$/i)) ext.condominio = condMatch[1].trim();
+
+  // 7) BAIRRO — extrai de "<Bairro>, São Paulo" ou padrão similar
+  const bairroMatch = md.match(/([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç]+){0,2}),\s*S[ãa]o\s*Paulo/);
+  if (bairroMatch) ext.bairro = bairroMatch[1].trim();
+
+  return ext;
+}
+
 // mesmo prédio? bate condomínio/endereço extraído com o do avaliando
 function classify(ext, subject = {}) {
   const hay = norm(`${ext.condominio || ""} ${ext.endereco || ""}`);
@@ -61,7 +110,7 @@ function classify(ext, subject = {}) {
   return "comparavel";
 }
 
-// PURA: converte a extração do CF num objeto `amostra` do contrato (testável sem rede)
+// PURA: converte extração em objeto `amostra` do contrato (testável sem rede)
 function mapExtraction(ext, url, subject = {}) {
   const preco  = parseN(ext.preco_total);
   const area   = parseN(ext.area_util_m2);
@@ -86,22 +135,22 @@ function mapExtraction(ext, url, subject = {}) {
   };
 }
 
-async function extractAmostra(url, subject = {}, cf = {}) {
-  const ext = await cfJson(url, { schema: SCHEMA, prompt: PROMPT, ...cf });
+async function extractAmostra(url, subject = {}, _legacy = {}) {
+  const md = await fetchJinaMarkdown(url);
+  const ext = extractFromMarkdown(md);
   return mapExtraction(ext, url, subject);
 }
 
-// extrai vários links e devolve [avaliando, ...candidatos] (pronto p/ a aprovação)
-async function montarAmostras(avaliando, urls = [], subject = {}, cf = {}) {
+// extrai vários links e devolve [avaliando, ...candidatos]
+async function montarAmostras(avaliando, urls = [], subject = {}, _legacy = {}) {
   const out = [];
-  // só entra na lista se vier amostra-shaped (objeto). Sem avaliando, segue sem crashar.
   if (avaliando && typeof avaliando === "object") {
     out.push({ ...avaliando, tipo: avaliando.tipo || "avaliando" });
   }
   const list = Array.isArray(urls) ? urls : [];
   for (const u of list) {
     if (!u) continue;
-    try { out.push(await extractAmostra(u, subject, cf)); }
+    try { out.push(await extractAmostra(u, subject)); }
     catch (e) { out.push({ tipo: "comparavel", nome: "(falha ao ler anúncio)", link: u, _erro: String(e.message || e) }); }
   }
   return out;
@@ -113,11 +162,10 @@ function montarAprovacao(amostras = []) {
     .filter(a => a && a.tipo !== "avaliando");
   let txt = "Encontrei estas amostras para o estudo. Confirme, remova ou me mande outros links:\n";
   cand.forEach((a, i) => {
-    txt += `\n${i + 1}. ${a.nome} — ${a.area || "?"}, ${a.suites || "?"} suítes, ${a.vagas || "?"} vagas — ${a.pedido}` +
-           (a.tipo === "mesmo_predio" ? "  ⟵ mesmo prédio" : "") + `\n${a.link}`;
+    txt += `\n${i + 1}. ${a.nome} — ${a.area || "?"}, ${a.suites || "?"} suítes, ${a.vagas || "?"} vagas — ${a.pedido}\n${a.link}\n`;
   });
-  txt += "\n\nResponda *ok* para aprovar todas, *remover N* para tirar uma, ou cole novos links.";
+  txt += "\nResponda *ok* para aprovar todas, *remover N* para tirar uma, ou cole novos links.";
   return txt;
 }
 
-module.exports = { extractAmostra, montarAmostras, montarAprovacao, mapExtraction, SCHEMA, PROMPT };
+module.exports = { extractAmostra, montarAmostras, montarAprovacao, mapExtraction, extractFromMarkdown, fetchJinaMarkdown };
