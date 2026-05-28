@@ -66,7 +66,11 @@ function buildEstudo(data, opts={}){
   const yearOf=(d)=> (String(d).match(/(\d{4})/g)||[]).slice(-1)[0] || "";
 
   const im = data.imovel||{}, co = data.corretor||{}, val = data.valoracao||{};
-  const edata = data.estudo_data || "";
+  // edata = label de data exibido nos slides 1 e 14. Aceita string direta;
+  // se vier objeto/vazio (estudo_data costuma chegar como {} do agente), usa hoje.
+  // Sem isso, {text: {}} explode no pptxgenjs ("itext.text.includes is not a function").
+  const edata = (typeof data.estudo_data === "string" && data.estudo_data.trim())
+              || new Date().toLocaleDateString("pt-BR");
 
   // ===== SLIDE 1 — CAPA =====
   { let s=p.addSlide(); s.background={color:NAVY};
