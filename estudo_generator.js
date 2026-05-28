@@ -10,6 +10,7 @@
  * Fotos do imóvel/corretor vêm por caminho/URL dentro de `data`.
  */
 const pptxgen = require("pptxgenjs");
+const { vendidosFromRows } = require("./itbi_format");
 
 const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
       INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
@@ -18,6 +19,13 @@ const HEAD="Georgia", BODY="Calibri";
 const H=5.625, MX=0.55;
 
 function buildEstudo(data, opts={}){
+  // BLINDAGEM: se vendidos vier cru do SQL (valor numérico / campo area_m2 / is_ancora),
+  // formata aqui mesmo. Idempotente: linhas já formatadas (valor string) passam intactas.
+  // Sem isso, {text: de.valor} com número quebra o pptxgenjs ("itext.text.includes is not a function").
+  if (Array.isArray(data.vendidos) && data.vendidos.length &&
+      (typeof data.vendidos[0].valor === "number" || "area_m2" in data.vendidos[0] || "is_ancora" in data.vendidos[0])) {
+    data.vendidos = vendidosFromRows(data.vendidos);
+  }
   const A = (opts.assets || ".").replace(/\/$/,"") + "/";
   const out = opts.out || "Estudo_Mercado.pptx";
   const p = new pptxgen();
@@ -268,11 +276,11 @@ function buildEstudo(data, opts={}){
     const cx=6.55, cw=2.9;
     s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
     s.addText("TENDÊNCIA REAL DO PRÉDIO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
-    s.addText([{text:de.valor||"",options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+    s.addText([{text:String(de.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
       {text:yearOf(de.data),options:{fontSize:11,color:ICE}}],
       {x:cx+0.25,y:2.3,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
     s.addText("→",{x:cx+0.25,y:3.0,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:16,color:RED,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText([{text:ate.valor||"",options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+    s.addText([{text:String(ate.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
       {text:yearOf(ate.data)+" — alta acima do IPCA",options:{fontSize:11,color:ICE}}],
       {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
     s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios; a comparação direta é pelo valor total.${trunc?`  ·  ${allVend.length} transações no total; exibindo a mais antiga e as ${MAXFIT-1} mais recentes.`:""}`,
