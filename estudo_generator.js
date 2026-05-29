@@ -130,7 +130,10 @@ function buildEstudo(data, opts={}){
     const tx=4.05;
     s.addText(co.nome||"",{x:tx,y:1.8,w:5.4,h:0.6,fontFace:HEAD,fontSize:28,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
     s.addText(`CRECI ${co.creci||""} · ${co.unidade||""}`,{x:tx,y:2.42,w:5.4,h:0.34,fontFace:BODY,fontSize:12.5,color:RED,bold:true,charSpacing:1,align:"left",valign:"middle",margin:0});
-    s.addText(co.bio||"",{x:tx,y:2.95,w:5.45,h:1.8,fontFace:BODY,fontSize:14,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
+    // bio: usa o que vier; se vazia, fallback genérico (a tabela corretores_associados não tem coluna bio
+    // — o corretor pode cadastrar via outro fluxo; até lá, evita slide vazio)
+    const bioFallback = `Atua representando vendedores em ${co.unidade||"RE/MAX Ville"}, com método: precificação fundamentada em dados de ITBI, exposição na rede RE/MAX e negociação conduzida com discrição e transparência — para anunciar pelo valor certo e vender no tempo certo.`;
+    s.addText(co.bio||bioFallback,{x:tx,y:2.95,w:5.45,h:1.8,fontFace:BODY,fontSize:14,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
     footer(s,4);
   }
 
@@ -292,18 +295,44 @@ function buildEstudo(data, opts={}){
     });
     s.addTable([head,...rows],{x:MX,y:1.7,w:5.7,colW:[1.15,1.55,1.1,1.1,0.8],
       border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false});
-    // callout de tendência (primeiro -> âncora)
+    // callout de tendência (primeiro -> âncora) — adaptativo ao número de pontos e direção
     const de = vend[0]||{}, ate = vend.find(v=>v.ancora) || vend[vend.length-1] || {};
     const cx=6.55, cw=2.9;
     s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
-    s.addText("TENDÊNCIA REAL DO PRÉDIO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
-    s.addText([{text:String(de.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
-      {text:yearOf(de.data),options:{fontSize:11,color:ICE}}],
-      {x:cx+0.25,y:2.3,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
-    s.addText("→",{x:cx+0.25,y:3.0,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:16,color:RED,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText([{text:String(ate.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
-      {text:yearOf(ate.data)+" — alta acima do IPCA",options:{fontSize:11,color:ICE}}],
-      {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+
+    // helper: extrai número do valor formatado ("R$ 700.000,00" → 700000) para comparação direta
+    const numOf = v => {
+      const m = String(v||"").match(/[\d.,]+/);
+      if (!m) return 0;
+      return Number(m[0].replace(/\./g,"").replace(",","."));
+    };
+    const ehMesmoPonto = de && ate && de.data === ate.data && numOf(de.valor) === numOf(ate.valor);
+    const dV = numOf(de.valor), aV = numOf(ate.valor);
+    const diffPct = dV > 0 ? ((aV - dV) / dV) * 100 : 0;
+
+    if (vend.length <= 1 || ehMesmoPonto) {
+      // só 1 transação real: não mostra "tendência" (que precisa de 2 pontos)
+      s.addText("ÚNICA VENDA REGISTRADA",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      s.addText([{text:String(ate.valor||de.valor||""),options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
+        {text:yearOf(ate.data||de.data),options:{fontSize:12,color:ICE,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:6}},
+        {text:"Histórico insuficiente para inferir tendência — apenas 1 transação na base.",options:{fontSize:10,color:ICE,italic:true}}],
+        {x:cx+0.25,y:2.4,w:cw-0.5,h:2.0,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    } else {
+      // 2+ pontos: tendência real, com texto direcional
+      let direcao;
+      if (Math.abs(diffPct) < 1)        direcao = "estabilidade em termos nominais";
+      else if (diffPct > 0)              direcao = (diffPct > 20 ? "alta acima do IPCA" : "alta moderada");
+      else                                direcao = (diffPct < -10 ? "queda em termos reais" : "queda leve");
+      s.addText("TENDÊNCIA REAL DO PRÉDIO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      s.addText([{text:String(de.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+        {text:yearOf(de.data),options:{fontSize:11,color:ICE}}],
+        {x:cx+0.25,y:2.3,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+      s.addText("→",{x:cx+0.25,y:3.0,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:16,color:RED,bold:true,align:"left",valign:"middle",margin:0});
+      s.addText([{text:String(ate.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+        {text:yearOf(ate.data)+" — "+direcao,options:{fontSize:11,color:ICE}}],
+        {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+    }
     s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios; a comparação direta é pelo valor total.${trunc?`  ·  ${allVend.length} transações no total; exibindo a mais antiga e as ${MAXFIT-1} mais recentes.`:""}`,
       {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     footer(s,10);
