@@ -25,6 +25,7 @@ const os = require("os");
 const path = require("path");
 const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
+const { runBackfillBatch } = require("./backfill_geo");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -127,6 +128,19 @@ app.post("/estudo-casa", async (req, res) => {
     const code = e.code || null;
     // 422 na trava de comps insuficientes -> o n8n distingue de erro real e responde honesto ao corretor
     res.status(code === "COMPS_INSUFICIENTES" ? 422 : 500).json({ error: String(e && e.message || e), code });
+  }
+});
+
+// backfill de coordenada (geom) via GeoSampa — uso único/administrativo, em lote.
+// Chame repetido (POST {"limit":50}) até "restantes" = 0. Resumível.
+app.post("/backfill-geo", async (req, res) => {
+  if (!pool) return res.status(500).json({ error: "DATABASE_URL ausente" });
+  try {
+    const limit = Number((req.body && req.body.limit) || 50);
+    res.json(await runBackfillBatch(pool, { limit }));
+  } catch (e) {
+    console.error("erro /backfill-geo:", e);
+    res.status(500).json({ error: String(e && e.message || e) });
   }
 });
 
