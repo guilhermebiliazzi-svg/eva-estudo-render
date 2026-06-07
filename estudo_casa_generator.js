@@ -252,9 +252,56 @@ function buildEstudoCasa(data, opts={}){
     footer(s,9);
   }
 
-  // ===== SLIDE 10 — CICLO DE VIDA (fixo + marcador de idade) =====
+  // ===== SLIDE 10 — AMOSTRAS (anúncios ativos · preço pedido) — data-driven =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"09 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
+    eyebrow(s,"09 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
+    s.addText("Anúncios atuais semelhantes · calibram a estratégia de anúncio",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    const amostras = data.amostras||[];
+    if (amostras.length) {
+      const hdrA=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
+      const headA=["Imóvel","Bairro","Área","Pedido","R$/m²"].map(hdrA);
+      const cellA=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:10.5,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,hyperlink:o.hyperlink,underline:o.underline}});
+      const MAXFIT=6;
+      let src=amostras, truncA=0;
+      if (amostras.length>MAXFIT){ src=amostras.slice(0,MAXFIT); truncA=amostras.length-MAXFIT; }
+      const rowsA=src.map(a=>[
+        cellA(a.nome||a.ref||a.titulo||"anúncio",{align:"left",
+          ...(a.link?{hyperlink:{url:a.link,tooltip:"Abrir anúncio"},color:LINK,underline:true}:{})}),
+        cellA(a.bairro),
+        cellA(a.area),
+        cellA(a.pedido,{bold:true}),
+        cellA(a.valor_m2),
+      ]);
+      s.addTable([headA,...rowsA],{x:MX,y:1.7,w:5.95,
+        colW:[1.95,1.35,0.9,1.0,0.95].map(w=>w*5.95/(1.95+1.35+0.9+1.0+0.95)),
+        border:{type:"solid",color:LINE,pt:0.75},rowH:0.40,valign:"middle",fontFace:BODY,autoPage:false});
+      const cx=6.75, cw=2.7;
+      s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+      s.addText("PREÇO PEDIDO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      s.addText([
+        {text:`${amostras.length} anúncio${amostras.length>1?"s":""} ativo${amostras.length>1?"s":""}`,options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:8}},
+        {text:"O preço pedido calibra a estratégia de anúncio — não é valor fechado.",options:{fontSize:11,color:ICE,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:6}},
+        {text:"O valor de mercado deste estudo vem das vendas reais (ITBI).",options:{fontSize:11,color:ICE}},
+      ],{x:cx+0.25,y:2.4,w:cw-0.5,h:2.1,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+      s.addText(`Anúncios ativos comparáveis (portais).${truncA?`  ·  ${amostras.length} no total; exibindo os ${MAXFIT} mais aderentes.`:""}  Preço pedido ≠ valor fechado.`,
+        {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    } else {
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.95,w:8.9,h:1.5,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.95,w:0.09,h:1.5,fill:{color:RED},line:{type:"none"}});
+      s.addText([
+        {text:"Sem anúncios ativos comparáveis informados.",options:{fontSize:15,bold:true,color:NAVY,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:6}},
+        {text:"Este estudo se baseia nas vendas reais (ITBI). Para incluir o preço pedido de casas concorrentes à venda, envie os links dos anúncios à EVA antes de gerar o estudo.",options:{fontSize:12.5,color:INK}},
+      ],{x:MX+0.35,y:2.15,w:8.3,h:1.1,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
+    }
+    footer(s,10);
+  }
+
+  // ===== SLIDE 11 — CICLO DE VIDA (fixo + marcador de idade) =====
+  { let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
     s.addImage({path:A+"ciclo_vida.png",x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
     if (im.idade_anos != null) {
       const imgX=MX, imgY=1.55, imgW=6.55, imgH=6.55*5.0/10.6;
@@ -275,12 +322,12 @@ function buildEstudoCasa(data, opts={}){
       {text:"",options:{breakLine:true,fontSize:6}},
       {text:"A construção entra somada e depreciada: quanto mais antiga, menos agrega ao valor final.",options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
-    footer(s,10);
+    footer(s,11);
   }
 
-  // ===== SLIDE 11 — MÉTODO DE AVALIAÇÃO (R$/m² terreno -> faixa) =====
+  // ===== SLIDE 12 — MÉTODO DE AVALIAÇÃO (R$/m² terreno -> faixa) =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"10 · Método"); title(s,"Do R$/m² de terreno ao valor");
+    eyebrow(s,"11 · Método"); title(s,"Do R$/m² de terreno ao valor");
     const cw=2.85, gap=0.2, y0=1.85, ch=1.5;
     const cards=[
       ["PISO · p25", val.rs_m2_terreno_p25||"", "comparáveis mais conservadores", NAVY],
@@ -301,10 +348,10 @@ function buildEstudoCasa(data, opts={}){
       bul("Usamos a mediana (não a média): uma venda atípica não distorce o resultado."),
       {text:"A construção é somada à parte, pelo custo de reposição depreciado conforme a idade.",options:{bullet:{code:"2022"},color:INK}},
     ],{x:MX,y:3.92,w:8.9,h:1.2,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
-    footer(s,11);
+    footer(s,12);
   }
 
-  // ===== SLIDE 12 — CONCLUSÃO (valor de mercado + faixa) =====
+  // ===== SLIDE 13 — CONCLUSÃO (valor de mercado + faixa) =====
   { let s=p.addSlide(); s.background={color:NAVY};
     eyebrowWhite(s,"Conclusão",MX,0.55);
     s.addText("Valor de mercado estimado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
@@ -317,10 +364,10 @@ function buildEstudoCasa(data, opts={}){
       {text:`× ${val.area_terreno?val.area_terreno+" m² de terreno":"área do lote"}`,options:{fontSize:11,color:ICE}}],
       {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
     s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
-    footer(s,12,true);
+    footer(s,13,true);
   }
 
-  // ===== SLIDE 13 — RESSALVAS + CONTATO =====
+  // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
     eyebrowWhite(s,"Ressalvas e Contato",MX,0.55);
     s.addText("Sobre este estudo",{x:MX,y:1.05,w:9,h:0.55,fontFace:HEAD,fontSize:24,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
