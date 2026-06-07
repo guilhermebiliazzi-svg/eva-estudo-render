@@ -1,103 +1,139 @@
 // valoracao_casa.js — Avaliação de CASA/TERRENO pelo MÉTODO DO CUSTO.
-// Separa terreno (valoriza) de construção (deprecia), em vez de dividir o
-// preço TOTAL pela área de terreno (que embute a construção e infla o R$/m²).
+// Exporta buildValoracaoCasa({ comps, avaliando, ref, opts }) — assinatura usada pelo orchestrator_casa.js.
+// Separa terreno (valoriza) de construção (deprecia), em vez de dividir o preço TOTAL
+// pela área de terreno (que embute a construção e infla o R$/m²).
 //
-// Fluxo:
-//   1) p/ cada comparável: valor_construção = CUB × área_constr × depreciação(idade)
-//                          valor_terreno   = valor_venda − valor_construção  (com piso de segurança)
-//                          R$/m²_terreno_limpo = valor_terreno / área_terreno
-//   1b) SELEÇÃO DE COMPARÁVEIS (novo — evita super-avaliação por comp ruim):
+//   1) p/ cada comparável: corrige o valor pelo IPCA até `ref`;
+//      valor_construção = CUB × área_constr × depreciação(idade);
+//      valor_terreno    = valor_corrigido − valor_construção (com piso de segurança);
+//      R$/m²_terreno_limpo = valor_terreno / área_terreno.
+//   1b) SELEÇÃO DE COMPARÁVEIS (evita super-avaliação por comp ruim):
 //       TRAVA 1  faixa de tamanho de lote: mantém só lotes parecidos com o avaliando
 //                (descarta micro-lotes que inflam o R$/m² e lotes grandes demais).
 //       TRAVA 2  trim de outlier (cerca IQR) sobre o R$/m² de terreno limpo
 //                (corta vendas de luxo / atípicas que puxam a mediana).
 //       TRAVA 3  (opcional) ajuste de plottage: leva o R$/m² do comparável à escala
 //                do lote alvo (lote grande tem R$/m² menor). Default DESLIGADA.
-//   2) mediana / p25 / p75 sobre o R$/m²_terreno_limpo JÁ SELECIONADO (robusto a outlier)
-//   3) avaliando: valor = mediana × área_terreno + CUB × área_constr × depreciação(idade)
+//   2) mediana / p25 / p75 sobre o R$/m²_terreno_limpo JÁ SELECIONADO (robusto a outlier).
+//   3) avaliando: valor = mediana × área_terreno + CUB × área_constr × depreciação(idade).
 //
-// REQUER, além do payload atual:
-//   opts.cub          — R$/m² construído (CUB-SP por padrão construtivo). SEM DEFAULT CONFIÁVEL: defina.
-//   idade (anos)      — por comparável e do avaliando. Se ausente, usa opts.deprPadrao (assunção uniforme → Ressalvas).
-//
-// Mantém o IPCA fora daqui: passe `valor` já corrigido a hoje (como hoje a mediana é "corrigida a hoje").
+// REQUER opts.cub (R$/m² construído, CUB-SP por padrão). idade por comparável/avaliando é opcional
+// (sem ela → fator uniforme opts.deprPadrao, sinalizado em depr_uniforme_usada p/ as Ressalvas).
 
-// ---------- depreciação (Ross + coeficiente de estado opcional, à la Heidecke) ----------
-function fatorDepreciacao(idade, { vidaUtil = 60, estadoCoef = 0, deprPadrao = 0.80 } = {}) {
-  if (!Number.isFinite(idade) || idade < 0) return deprPadrao;            // sem idade → fallback uniforme
-  const k = Math.min(idade / vidaUtil, 1);
-  const dRoss = 0.5 * (k + k * k);                                        // depreciação por idade (Ross)
-  const d = dRoss + (1 - dRoss) * estadoCoef;                            // + estado de conservação (0 = novo/ótimo)
-  return Math.min(Math.max(1 - d, 0.20), 1);                            // piso de 20% de valor residual
+// ---------- IPCA (mesmas tabelas do valoracao.js do apto — manter em sincronia) ----------
+const IPCA_ANUAL = { 2018:3.75, 2019:4.31, 2020:4.52, 2021:10.06, 2022:5.79, 2023:4.62, 2024:4.83, 2025:4.26 };
+const IPCA_YTD   = { 2026: 2.60 };
+function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
+  if (!Number.isFinite(anoDe) || !Number.isFinite(mesDe)) return 1;
+  let f = Math.pow(1 + (IPCA_ANUAL[anoDe]||0)/100, (12 - mesDe)/12);
+  for (let y = anoDe + 1; y < anoRef; y++) f *= 1 + (IPCA_ANUAL[y]||0)/100;
+  f *= 1 + (IPCA_YTD[anoRef]||0)/100;
+  return Number.isFinite(f) && f > 0 ? f : 1;
+}
+function parseDataBR(d){ // "19/12/2023" | "2023-12-19" | Date -> {ano,mes}
+  if (d instanceof Date) return { ano:d.getUTCFullYear(), mes:d.getUTCMonth()+1 };
+  const br = String(d).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return { ano:+br[3], mes:+br[2] };
+  const iso = String(d).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return { ano:+iso[1], mes:+iso[2] };
+  const x = new Date(d); return { ano:x.getUTCFullYear(), mes:x.getUTCMonth()+1 };
 }
 
-// ---------- quantil com interpolação linear ----------
+// ---------- formatadores (mesma régua do apto) ----------
+const decs    = v => (v/1e6) < 10 ? 2 : 1;
+const milhar  = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+const reaisN  = v => milhar(Math.round(Number(v)/1000)*1000) + ",00";
+const reais   = v => "R$ " + reaisN(v);
+const milhoes = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " milhões";
+const rsM2fmt = v => "R$ " + milhar(Math.round(v)) + "/m²";
+const faixaFmt = (a,b) => (a >= 1e6 && b >= 1e6)
+  ? `R$ ${(a/1e6).toFixed(decs(a)).replace(".",",")} a ${(b/1e6).toFixed(decs(b)).replace(".",",")} milhões`
+  : `${reais(a)} a ${reaisN(b)}`;
+
+// ---------- depreciação (Ross por idade + coef. de estado opcional) ----------
+function fatorDepreciacao(idade, { vidaUtil = 60, estadoCoef = 0, deprPadrao = 0.80 } = {}) {
+  if (!Number.isFinite(idade) || idade < 0) return deprPadrao;
+  const k = Math.min(idade / vidaUtil, 1);
+  const dRoss = 0.5 * (k + k * k);
+  const d = dRoss + (1 - dRoss) * estadoCoef;
+  return Math.min(Math.max(1 - d, 0.20), 1);
+}
+
+// ---------- quantil (interpolação linear) ----------
 function quantil(arrOrdenado, q) {
   const n = arrOrdenado.length;
   if (!n) return NaN;
   if (n === 1) return arrOrdenado[0];
-  const pos = (n - 1) * q;
-  const lo = Math.floor(pos), hi = Math.ceil(pos);
-  if (lo === hi) return arrOrdenado[lo];
-  return arrOrdenado[lo] + (arrOrdenado[hi] - arrOrdenado[lo]) * (pos - lo);
+  const pos = (n - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return lo === hi ? arrOrdenado[lo] : arrOrdenado[lo] + (arrOrdenado[hi] - arrOrdenado[lo]) * (pos - lo);
 }
 
-function valorarCasa({ avaliando = {}, comparaveis = [], opts = {} }) {
-  const {
-    cub,                                  // OBRIGATÓRIO: R$/m² de reposição da construção
-    vidaUtil = 60,
-    estadoCoef = 0,                       // 0 = ótimo; aumente p/ imóveis mais deteriorados
-    deprPadrao = 0.80,                    // usado só quando falta idade
-    pisoTerrenoFrac = 0.30,               // terreno nunca < 30% do valor da venda (guard anti-construção-cara)
-
-    // ---- TRAVA 1: faixa de tamanho de lote (relativa ao lote do avaliando) ----
-    loteBandLo = 0.4,                     // mantém comps com terreno >= 0,4× o lote alvo
-    loteBandHi = 2.5,                     // ...e <= 2,5× o lote alvo
-    minCompsBanda = 8,                    // se a faixa deixar menos que isto, relaxa (usa todos)
-    // ---- TRAVA 2: trim de outlier (cerca IQR) sobre o R$/m² limpo ----
-    iqrK = 1.5,                           // largura da cerca (1,5 = padrão Tukey)
-    minCompsTrim = 6,                     // se o trim deixar menos que isto, não aplica
-    // ---- TRAVA 3: ajuste de plottage (opcional, default off) ----
-    plottageExp = 0,                      // 0 = desligado. ~0,15–0,25 reduz o R$/m² de lotes menores que o alvo
-  } = opts;
-
+function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
+  const cub = Number(opts.cub);
   if (!Number.isFinite(cub) || cub <= 0) {
-    throw new Error("valorarCasa: opts.cub (R$/m² de construção) é obrigatório no método do custo.");
+    throw new Error("buildValoracaoCasa: opts.cub (R$/m² de construção) é obrigatório no método do custo.");
   }
 
-  // DEBUG opcional: dumpa os comparáveis recebidos (só quando LOG_COMPS_CASA=1 no ambiente).
-  // Serve pra capturar os 60 comps de um estudo nos logs do Render e calibrar as travas.
+  // DEBUG opcional: dumpa os comparáveis recebidos (só quando LOG_COMPS_CASA=1).
   if (process.env.LOG_COMPS_CASA === "1") {
-    const enxuto = comparaveis.map(c => ({
-      data: c.data,
-      area_terreno: Number(c.terreno || c.area_terreno),
-      area_construida: Number(c.constr || c.area_construida || 0),
-      valor: Number(c.valor),
+    const enxuto = comps.map(c => ({
+      data: c.data, area_terreno: Number(c.area_terreno),
+      area_construida: Number(c.area_construida || 0), valor: Number(c.valor),
     }));
     console.log(`[valoracao_casa] comparaveis recebidos (${enxuto.length}): ` + JSON.stringify(enxuto));
   }
 
-  const dOpts = { vidaUtil, estadoCoef, deprPadrao };
+  const dOpts = {
+    vidaUtil:   opts.vidaUtil   ?? 60,
+    estadoCoef: opts.estadoCoef ?? 0,
+    deprPadrao: opts.deprPadrao ?? 0.80,
+  };
+  const pisoTerrenoFrac = opts.pisoTerrenoFrac ?? 0.30;
+
+  // ---- parâmetros das travas (ajustáveis via opts) ----
+  const loteBandLo    = opts.loteBandLo    ?? 0.4;   // TRAVA 1: lote >= 0,4× o alvo
+  const loteBandHi    = opts.loteBandHi    ?? 2.5;   //          ...e <= 2,5× o alvo
+  const minCompsBanda = opts.minCompsBanda ?? 8;     //          se a faixa deixar < isto, relaxa (usa todos)
+  const iqrK          = opts.iqrK          ?? 1.5;   // TRAVA 2: largura da cerca IQR (Tukey)
+  const minCompsTrim  = opts.minCompsTrim  ?? 6;     //          se o trim deixar < isto, não aplica
+  const plottageExp   = opts.plottageExp   ?? 0;     // TRAVA 3: 0 = desligada
+
+  const hoje   = new Date();
+  const r      = ref ? parseDataBR(ref) : null;
+  const anoRef = (r && Number.isFinite(r.ano)) ? r.ano : hoje.getFullYear();
+  const mesRef = (r && Number.isFinite(r.mes)) ? r.mes : hoje.getMonth() + 1;
 
   const areaTerr   = Number(avaliando.area_terreno);
   const areaConstr = Number(avaliando.area_construida || 0);
-  if (!(areaTerr > 0)) throw new Error("valorarCasa: avaliando.area_terreno é obrigatório.");
-
-  // 1) R$/m² de TERRENO LIMPO de cada comparável (ainda SEM seleção)
-  const todos = [];
-  for (const c of comparaveis) {
-    const terreno = Number(c.terreno || c.area_terreno);
-    const constr  = Number(c.constr  || c.area_construida || 0);
-    const valor   = Number(c.valor); // já corrigido a hoje (IPCA aplicado a montante)
-    if (!(terreno > 0) || !(valor > 0)) continue;
-
-    const valConstr = cub * constr * fatorDepreciacao(c.idade, dOpts);
-    // guard: construção não pode comer o terreno inteiro
-    const valTerreno = Math.max(valor - valConstr, valor * pisoTerrenoFrac);
-    const rs = valTerreno / terreno;
-    todos.push({ ...c, terreno, constr, valor, valConstr, valTerreno, rs_m2_terreno: rs });
+  if (!(areaTerr > 0)) {
+    const err = new Error("buildValoracaoCasa: avaliando.area_terreno é obrigatório.");
+    err.code = "AREA_TERRENO_AUSENTE";
+    throw err;
   }
-  if (!todos.length) throw new Error("valorarCasa: nenhum comparável válido (terreno e valor > 0).");
+
+  // 1) R$/m² de TERRENO LIMPO (corrigido IPCA) de cada comparável — ainda SEM seleção
+  let semIdadeComp = false;
+  const todos = [];
+  for (const c of comps) {
+    const terreno   = Number(c.area_terreno);
+    const constr    = Number(c.area_construida || 0);
+    const valorOrig = Number(c.valor);
+    if (!(terreno > 0) || !(valorOrig > 0)) continue;
+    if (!Number.isFinite(c.idade)) semIdadeComp = true;
+
+    const fator      = ipcaFactor(...Object.values(parseDataBR(c.data)), anoRef, mesRef);
+    const valorCorr  = valorOrig * fator;
+    const valConstr  = cub * constr * fatorDepreciacao(c.idade, dOpts);
+    const valTerreno = Math.max(valorCorr - valConstr, valorCorr * pisoTerrenoFrac);
+    const rs         = valTerreno / terreno;
+
+    todos.push({ ...c, valor: valorOrig, terreno, rs_num: rs });
+  }
+  if (!todos.length) {
+    const err = new Error("buildValoracaoCasa: nenhum comparável válido (terreno e valor > 0).");
+    err.code = "COMPS_INSUFICIENTES";
+    throw err;
+  }
 
   // ---- TRAVA 1: faixa de tamanho de lote ----
   const loLote = loteBandLo * areaTerr, hiLote = loteBandHi * areaTerr;
@@ -108,54 +144,55 @@ function valorarCasa({ avaliando = {}, comparaveis = [], opts = {} }) {
 
   // ---- TRAVA 3 (opcional): plottage — escala o R$/m² do comp para o lote alvo ----
   if (plottageExp > 0) {
-    usados = usados.map(x => ({
-      ...x,
-      rs_bruto: x.rs_m2_terreno,
-      rs_m2_terreno: x.rs_m2_terreno * Math.pow(x.terreno / areaTerr, plottageExp),
-    }));
+    usados = usados.map(x => ({ ...x, rs_bruto: x.rs_num, rs_num: x.rs_num * Math.pow(x.terreno / areaTerr, plottageExp) }));
   }
 
   // ---- TRAVA 2: trim de outlier (cerca IQR) sobre o R$/m² limpo ----
-  const rsOrdParaTrim = usados.map(x => x.rs_m2_terreno).sort((a, b) => a - b);
-  const q1 = quantil(rsOrdParaTrim, 0.25), q3 = quantil(rsOrdParaTrim, 0.75);
+  const rsParaTrim = usados.map(x => x.rs_num).sort((a, b) => a - b);
+  const q1 = quantil(rsParaTrim, 0.25), q3 = quantil(rsParaTrim, 0.75);
   const iqr = q3 - q1;
   const cercaLo = q1 - iqrK * iqr, cercaHi = q3 + iqrK * iqr;
-  const trimmed = usados.filter(x => x.rs_m2_terreno >= cercaLo && x.rs_m2_terreno <= cercaHi);
+  const trimmed = usados.filter(x => x.rs_num >= cercaLo && x.rs_num <= cercaHi);
   let trimRelaxado = false;
   if (trimmed.length >= minCompsTrim) { usados = trimmed; } else { trimRelaxado = true; }
 
   const removidos = todos.length - usados.length;
 
   // 2) mediana / p25 / p75 sobre o conjunto JÁ SELECIONADO
-  const rsTerreno = usados.map(x => x.rs_m2_terreno).sort((a, b) => a - b);
-  const mediana = quantil(rsTerreno, 0.50);
-  const p25     = quantil(rsTerreno, 0.25);
-  const p75     = quantil(rsTerreno, 0.75);
+  const rsLimpo = usados.map(x => x.rs_num).sort((a, b) => a - b);
+  const mediana = quantil(rsLimpo, 0.50);
+  const p25     = quantil(rsLimpo, 0.25);
+  const p75     = quantil(rsLimpo, 0.75);
+
+  // comps enriquecidos p/ a tabela (só os SELECIONADOS, p/ casar com o headline)
+  const enriched = usados.map(({ rs_num, terreno, ...rest }) => ({ ...rest, rs_m2_terreno: Math.round(rs_num) }));
 
   // 3) avaliando: terreno (faixa) + construção depreciada (ponto fixo)
-  const valConstrAvaliando = cub * areaConstr * fatorDepreciacao(avaliando.idade, dOpts);
+  const valConstrAval = cub * areaConstr * fatorDepreciacao(avaliando.idade, dOpts);
+  const valorTerreno  = mediana * areaTerr;
+  const valor         = valorTerreno + valConstrAval;
+  const piso          = p25 * areaTerr + valConstrAval;
+  const teto          = p75 * areaTerr + valConstrAval;
 
-  const valorTerrenoAlvo = mediana * areaTerr;
-  const valor = valorTerrenoAlvo + valConstrAvaliando;
-  const piso  = p25 * areaTerr   + valConstrAvaliando;
-  const teto  = p75 * areaTerr   + valConstrAvaliando;
-
-  const idadeFaltando = !Number.isFinite(avaliando.idade) ||
-                        usados.some(c => !Number.isFinite(c.idade));
+  const semIdade = semIdadeComp || !Number.isFinite(avaliando.idade);
 
   return {
-    // base terreno limpo
-    rs_m2_terreno: { mediana, p25, p75 },
-    n_comparaveis: rsTerreno.length,
-    // decomposição do avaliando
-    valor_terreno: valorTerrenoAlvo,
-    valor_construcao: valConstrAvaliando,
-    // resultado
-    valor, piso, teto,
-    // metadados p/ Ressalvas e slides
+    // contrato consumido pelo estudo_casa_generator.js
+    rs_m2_terreno_alvo: rsM2fmt(mediana),
+    rs_m2_terreno_p25:  rsM2fmt(p25),
+    rs_m2_terreno_p75:  rsM2fmt(p75),
+    valor_mercado:      milhoes(valor),
+    faixa:              faixaFmt(piso, teto),
+    area_terreno:       areaTerr,
+    n_comps:            rsLimpo.length,
+    conclusao_apoio:    `Valor = terreno (${milhoes(valorTerreno)}) + construção depreciada (${reais(valConstrAval)}). `
+                      + `Terreno pela mediana de ${rsLimpo.length} casas vendidas (ITBI), corrigida pelo IPCA.`,
+    // comps enriquecidos p/ a tabela (orchestrator pode usar estes no lugar dos crus)
+    comps: enriched,
+    // metadados p/ Ressalvas / debug
     metodo: "custo (terreno + construção depreciada)",
-    cub, vida_util: vidaUtil, depr_uniforme_usada: idadeFaltando ? deprPadrao : null,
-    comparaveis_usados: usados,
+    cub, vida_util: dOpts.vidaUtil,
+    depr_uniforme_usada: semIdade ? dOpts.deprPadrao : null,
     // diagnóstico da seleção (novo — não quebra consumidores existentes)
     selecao: {
       n_total: todos.length,
@@ -168,45 +205,12 @@ function valorarCasa({ avaliando = {}, comparaveis = [], opts = {} }) {
       n_final: usados.length,
       removidos,
     },
+    _debug: {
+      rs_m2_terreno: { mediana:+mediana.toFixed(0), p25:+p25.toFixed(0), p75:+p75.toFixed(0) },
+      valor_terreno:+valorTerreno.toFixed(0), valor_construcao:+valConstrAval.toFixed(0),
+      valor:+valor.toFixed(0), piso:+piso.toFixed(0), teto:+teto.toFixed(0),
+    },
   };
 }
 
-module.exports = { valorarCasa, fatorDepreciacao, quantil };
-
-// ---------- self-test (node valoracao_casa.js) — usa os 6 comparáveis exibidos no estudo da Clóvis ----------
-if (require.main === module) {
-  // valores JÁ corrigidos a hoje pelo IPCA (≈ como o estudo exibe), p/ casar com a mediana "corrigida a hoje"
-  const comps = [
-    { data: "11/06/24", end: "Jose Jannarelli, 597",      area_terreno: 200, area_construida: 194, valor: 3_780_000 },
-    { data: "01/10/25", end: "Jose Jannarelli, 466",      area_terreno: 500, area_construida: 228, valor: 5_700_000 },
-    { data: "17/09/25", end: "Jose Jannarelli, 452",      area_terreno: 500, area_construida:  85, valor: 7_100_000 },
-    { data: "05/11/24", end: "Prof Oswaldo Teixeira, 340", area_terreno:  70, area_construida: 102, valor:   795_000 },
-    { data: "21/06/24", end: "Dos Tres Irmaos, 514",      area_terreno:  68, area_construida:  85, valor: 1_050_000 },
-    { data: "20/01/25", end: "Guihei Vatanabe, 89",       area_terreno: 125, area_construida: 111, valor: 1_360_000 },
-  ];
-  const avaliando = { area_terreno: 500, area_construida: 270 }; // Clóvis 601, sem idade → depr uniforme 0,80
-  const baseOpts = { cub: 2562.62, deprPadrao: 0.80 };
-  const fmt = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
-
-  // SEM travas (replica o comportamento atual)
-  const semTravas = valorarCasa({ avaliando, comparaveis: comps,
-    opts: { ...baseOpts, loteBandLo: 0, loteBandHi: 9999, minCompsBanda: 0, iqrK: 1e9, minCompsTrim: 0 } });
-
-  // COM travas — para 6 comps relaxa a faixa de lote (precisa de >=8); ilustra o IQR.
-  const comTravas = valorarCasa({ avaliando, comparaveis: comps, opts: { ...baseOpts, minCompsBanda: 3, minCompsTrim: 3 } });
-
-  const linha = (rotulo, r) => console.log(
-    rotulo.padEnd(14),
-    "n=" + r.n_comparaveis,
-    "| mediana R$/m² terr=" + Math.round(r.rs_m2_terreno.mediana),
-    "| faixa " + Math.round(r.rs_m2_terreno.p25) + "-" + Math.round(r.rs_m2_terreno.p75),
-    "| VALOR " + fmt(r.valor),
-    "(terreno " + fmt(r.valor_terreno) + " + constr " + fmt(r.valor_construcao) + ")"
-  );
-
-  console.log("=== Clovis 601 · lote 500 m² · constr 270 m² · CUB 2.562,62 (6 comps exibidos) ===");
-  linha("SEM travas", semTravas);
-  linha("COM travas", comTravas);
-  console.log("selecao:", JSON.stringify(comTravas.selecao));
-  console.log("mantidos:", comTravas.comparaveis_usados.map(c => `${c.end} (${c.terreno}m², R$/m²=${Math.round(c.rs_m2_terreno)})`));
-}
+module.exports = { buildValoracaoCasa, fatorDepreciacao, ipcaFactor, quantil };
