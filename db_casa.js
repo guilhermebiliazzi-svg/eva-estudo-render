@@ -25,6 +25,7 @@
 const SQL_STREET = `
 SELECT
   data_transacao::date                                        AS data,
+  logradouro,
   numero,
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
@@ -48,6 +49,7 @@ LIMIT $5;`;
 const SQL_RADIUS = `
 SELECT
   data_transacao::date                                        AS data,
+  logradouro,
   numero,
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
@@ -67,6 +69,7 @@ LIMIT $4;`;
 
 const mapRow = r => ({
   data: r.data,
+  logradouro: r.logradouro || null,
   numero: r.numero,
   area_terreno: Number(r.area_terreno),
   area_construida: r.area_construida == null ? null : Number(r.area_construida),
