@@ -15,12 +15,16 @@
  *   POST /estudo    body = { buildingKey, imovel, corretor, amostras, estudo_data, ref, phone? }
  *                   se amostras vazio e phone presente, recupera de amostras_sessao
  *   POST /estudo    body = { vendidosRows, imovel, corretor, amostras, ... }  // sem DB
+ *   POST /estudo-casa body = { rua, numero, raio?, tipo, area_terreno, area_construida?, testada?,
+ *                              uso_atual?, bairro?, corretor, ref, estudo_data? }  // casa de rua/terreno
+ *                   ou { ponto, raioMetros?, ... } (raio geográfico) | { comps, ... } (sem DB)
  */
 const express = require("express");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
+const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -101,6 +105,28 @@ app.post("/estudo", async (req, res) => {
   } catch (e) {
     console.error("erro /estudo:", e);
     res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
+// estudo de CASA DE RUA / TERRENO (Método 2 — comparáveis por R$/m² de terreno)
+app.post("/estudo-casa", async (req, res) => {
+  const body = req.body || {};
+  const out = path.join(os.tmpdir(), `estudo_casa_${Date.now()}.pptx`);
+  try {
+    if (Array.isArray(body.comps) && body.comps.length) {
+      await gerarEstudoCasa({ comps: body.comps, body, assets: ASSETS, out }); // comps no body (sem DB)
+    } else {
+      if (!pool) throw new Error("DATABASE_URL não configurada para buscar comps de casa");
+      await gerarEstudoCasaFromDB({ pool, ...body, assets: ASSETS, out });     // busca comps por rua+número (ou ponto/raio)
+    }
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", 'attachment; filename="Estudo_Casa.pptx"');
+    fs.createReadStream(out).pipe(res).on("close", () => fs.unlink(out, () => {}));
+  } catch (e) {
+    console.error("erro /estudo-casa:", e);
+    const code = e.code || null;
+    // 422 na trava de comps insuficientes -> o n8n distingue de erro real e responde honesto ao corretor
+    res.status(code === "COMPS_INSUFICIENTES" ? 422 : 500).json({ error: String(e && e.message || e), code });
   }
 });
 
