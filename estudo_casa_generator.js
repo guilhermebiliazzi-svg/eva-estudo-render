@@ -217,13 +217,15 @@ function buildEstudoCasa(data, opts={}){
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
     const head=["Data","Endereço","Terreno","Constr.","Valor","R$/m² terr."].map(hdr);
     const cell=(t,o={})=>({text:String(t),options:{fontSize:10.5,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
+    // 09/08/2023 -> 09/08/23: evita a coluna Data quebrar em 2 linhas
+    const shortData = d => String(d||"").replace(/^(\d{2}\/\d{2}\/)\d{2}(\d{2})$/, "$1$2");
     const allComps = data.comps||[];
-    const MAXFIT = 8;
+    const MAXFIT = 6;                          // 6 linhas cabem entre y=1.7 e o caption (y=4.78); 8 estourava
     let comps = allComps, trunc = 0;
     if (allComps.length > MAXFIT) { comps = allComps.slice(0, MAXFIT); trunc = allComps.length - MAXFIT; }
-    const rowH = comps.length > 6 ? 0.33 : 0.42;
+    const rowH = 0.40;                          // altura fixa e determinística (antes 0.33 p/ >6 linhas estourava)
     const rows = comps.map(c=>[
-      cell(c.data),
+      cell(shortData(c.data)),
       cell(c.endereco,{align:"left"}),
       cell(c.area_terreno),
       cell(c.area_construida),
