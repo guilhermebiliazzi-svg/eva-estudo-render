@@ -270,9 +270,9 @@ function buildEstudoCasa(data, opts={}){
     s.addText([
       {text:"O valor de uma casa é terreno (valoriza) + construção (deprecia).",options:{color:INK,breakLine:true,bold:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
-      {text:"Por isso a avaliação parte do R$/m² de terreno da região, não do custo da construção.",options:{color:INK,breakLine:true}},
+      {text:"O terreno é avaliado pelo R$/m² de casas vendidas na região; a construção, pelo custo de reposição.",options:{color:INK,breakLine:true}},
       {text:"",options:{breakLine:true,fontSize:6}},
-      {text:"A construção entra como ajuste — quanto mais antiga, menos agrega ao valor do lote.",options:{color:INK}},
+      {text:"A construção entra somada e depreciada: quanto mais antiga, menos agrega ao valor final.",options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
     footer(s,10);
   }
@@ -296,9 +296,9 @@ function buildEstudoCasa(data, opts={}){
     s.addText("COMO APLICAMOS",{x:MX,y:3.6,w:5,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
     const bul=(t)=>({text:t,options:{bullet:{code:"2022"},color:INK,breakLine:true}});
     s.addText([
-      bul(`Cada R$/m² de terreno é multiplicado pela área do lote (${val.area_terreno?val.area_terreno+" m²":"do imóvel"}) — gerando piso, alvo e teto.`),
+      bul(`O terreno = R$/m² mediano × área do lote (${val.area_terreno?val.area_terreno+" m²":"do imóvel"}) — com piso, alvo e teto.`),
       bul("Usamos a mediana (não a média): uma venda atípica não distorce o resultado."),
-      {text:"A construção e o uso específico do imóvel ajustam o valor dentro da faixa.",options:{bullet:{code:"2022"},color:INK}},
+      {text:"A construção é somada à parte, pelo custo de reposição depreciado conforme a idade.",options:{bullet:{code:"2022"},color:INK}},
     ],{x:MX,y:3.92,w:8.9,h:1.2,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
     footer(s,11);
   }
@@ -323,7 +323,7 @@ function buildEstudoCasa(data, opts={}){
   { let s=p.addSlide(); s.background={color:NAVY};
     eyebrowWhite(s,"Ressalvas e Contato",MX,0.55);
     s.addText("Sobre este estudo",{x:MX,y:1.05,w:9,h:0.55,fontFace:HEAD,fontSize:24,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText(data.ressalvas || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação parte do R$/m² de terreno de casas comparáveis vendidas na região; a construção e as condições específicas do imóvel ajustam o valor final.",
+    s.addText(data.ressalvas || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação separa terreno e construção (método do custo): o terreno pelo R$/m² de casas comparáveis vendidas na região (corrigido pelo IPCA), e a construção pelo custo de reposição depreciado conforme a idade. Na ausência da idade dos comparáveis, aplica-se depreciação uniforme.",
       {x:MX,y:1.7,w:8.9,h:1.4,fontFace:BODY,fontSize:13,color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
     s.addShape(p.shapes.LINE,{x:MX,y:3.35,w:8.9,h:0,line:{color:"24395C",width:1}});
     s.addImage({path:A+"remax_white.png",x:MX,y:3.65,w:2.1,h:2.1*1264/2673});

@@ -15,6 +15,11 @@ const { fetchCompsByStreet, fetchCompsByRadius } = require("./db_casa");
 const { buildValoracaoCasa } = require("./valoracao_casa");
 const { buildEstudoCasa } = require("./estudo_casa_generator");
 
+// CUB — custo de reposição da construção (R$/m² construído) p/ o método do custo.
+// >>> PLACEHOLDER: ajuste ao CUB-SP (SINDUSCON-SP) do padrão construtivo real. <<<
+// Override por requisição via body.cub.
+const CUB_PADRAO_SP = 2700;
+
 // ---- formatadores de exibição ----
 const milhar = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 const reais  = v => "R$ " + milhar(Math.round(Number(v) / 1000) * 1000) + ",00";
@@ -77,10 +82,12 @@ async function gerarEstudoCasa({ comps, body, assets, out }) {
   const imovel = montarImovel(body);
   const valoracao = buildValoracaoCasa({
     comps,
-    avaliando: { area_terreno: body.area_terreno, area_construida: body.area_construida },
-    ref: body.ref,
+    avaliando: { area_terreno: body.area_terreno, area_construida: body.area_construida, idade: imovel.idade_anos },
+    ref: body.ref || body.estudo_data,
+    opts: { cub: Number(body.cub) || CUB_PADRAO_SP },
   });
-  const compsFmt = formatComps(comps, body.rua);
+  // tabela do slide 9 usa os comps ENRIQUECIDOS (R$/m² de terreno LIMPO) p/ casar com o headline
+  const compsFmt = formatComps(valoracao.comps || comps, body.rua);
   return buildEstudoCasa({
     imovel,
     corretor: body.corretor || {},
