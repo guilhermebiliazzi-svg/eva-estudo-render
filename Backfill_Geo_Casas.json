@@ -1,0 +1,212 @@
+{
+  "name": "Backfill_Geo_Casas (GeoSampa)",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        -40
+      ],
+      "id": "daa81ba8-2ce6-4fd5-a8f6-cea419cbea1a",
+      "name": "Executar manual"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        160
+      ],
+      "id": "c8975053-9643-477d-9a1c-9e4b86485479",
+      "name": "A cada 2 min (opcional)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT setor, quadra\nFROM vendidos_itbi_usados\nWHERE descricao_uso LIKE 'RESID%' AND fracao_ideal = 1 AND area_terreno::numeric > 0 AND geom IS NULL\nORDER BY setor, quadra\nLIMIT 100;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        40
+      ],
+      "id": "603ca778-a3bb-4dba-9f0d-3c8de5916880",
+      "name": "Quadras pendentes",
+      "credentials": {
+        "postgres": {
+          "id": "B0kcxlebA6LHUbiQ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://wfs.geosampa.prefeitura.sp.gov.br/geoserver/geoportal/ows",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "service",
+              "value": "WFS"
+            },
+            {
+              "name": "version",
+              "value": "1.0.0"
+            },
+            {
+              "name": "request",
+              "value": "GetFeature"
+            },
+            {
+              "name": "typeName",
+              "value": "geoportal:lote_cidadao"
+            },
+            {
+              "name": "outputFormat",
+              "value": "application/json"
+            },
+            {
+              "name": "srsName",
+              "value": "EPSG:31983"
+            },
+            {
+              "name": "CQL_FILTER",
+              "value": "=cd_setor_fiscal='{{ $json.setor }}' AND cd_quadra_fiscal='{{ $json.quadra }}'"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 150
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        40
+      ],
+      "id": "7e6af663-dc02-4db1-8df4-ecc91797de45",
+      "name": "GeoSampa (lotes da quadra)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe as FeatureCollections do GeoSampa (1 por quadra), calcula o centroide\n// de cada lote e monta UM UPDATE em lote. sql_key = cd_setor_fiscal+cd_quadra_fiscal+cd_lote.\nconst items = $input.all();\nconst rows = [];\nfor (const it of items) {\n  const fc = it.json || {};\n  const feats = Array.isArray(fc.features) ? fc.features : [];\n  for (const f of feats) {\n    const p = f.properties || {};\n    const g = f.geometry;\n    if (!p.cd_lote || !g) continue;\n    let ring = null;\n    if (g.type === 'Polygon') ring = g.coordinates && g.coordinates[0];\n    else if (g.type === 'MultiPolygon') ring = g.coordinates && g.coordinates[0] && g.coordinates[0][0];\n    if (!ring || !ring.length) continue;\n    let sx = 0, sy = 0, n = 0;\n    for (const c of ring) { sx += c[0]; sy += c[1]; n++; }\n    if (!n) continue;\n    const x = sx / n, y = sy / n;\n    if (!isFinite(x) || !isFinite(y)) continue;\n    const sqlKey = String(p.cd_setor_fiscal) + String(p.cd_quadra_fiscal) + String(p.cd_lote);\n    if (!/^[0-9]{10}$/.test(sqlKey)) continue;   // só dígitos, 10 chars (setor3+quadra3+lote4)\n    rows.push(`('${sqlKey}', ${x}, ${y})`);\n  }\n}\nlet query;\nif (!rows.length) {\n  query = 'SELECT 0 AS atualizados;';\n} else {\n  query =\n    'UPDATE vendidos_itbi_usados v ' +\n    'SET geom = ST_Transform(ST_SetSRID(ST_MakePoint(d.x, d.y), 31983), 4326) ' +\n    'FROM (VALUES ' + rows.join(', ') + ') AS d(sql_key, x, y) ' +\n    'WHERE v.sql_key = d.sql_key AND v.geom IS NULL;';\n}\nreturn [{ json: { query, lotes_recebidos: rows.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        40
+      ],
+      "id": "d74ad48b-7220-4aef-89e7-f9d10753c060",
+      "name": "Centroides -> UPDATE"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        660,
+        40
+      ],
+      "id": "702a9ce5-8bcf-4e55-8f6b-801b6cd18c4f",
+      "name": "Grava geom",
+      "credentials": {
+        "postgres": {
+          "id": "B0kcxlebA6LHUbiQ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Executar manual": {
+      "main": [
+        [
+          {
+            "node": "Quadras pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada 2 min (opcional)": {
+      "main": [
+        [
+          {
+            "node": "Quadras pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quadras pendentes": {
+      "main": [
+        [
+          {
+            "node": "GeoSampa (lotes da quadra)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GeoSampa (lotes da quadra)": {
+      "main": [
+        [
+          {
+            "node": "Centroides -> UPDATE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Centroides -> UPDATE": {
+      "main": [
+        [
+          {
+            "node": "Grava geom",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
