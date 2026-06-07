@@ -103,7 +103,10 @@ async function fetchCompsByRadius(pool, ponto, opts = {}) {
   // amostra representativa do entorno. Piso 700, teto 1000.
   const raioMetros  = Math.min(Math.max(opts.raioMetros ?? 800, 700), 1000);
   const janelaMeses = opts.janelaMeses ?? 36;
-  const limit       = opts.limit       ?? 60;
+  // LIMITE 120 (não 60): em bairro denso, 60 casas cabem em ~600 m — só o bolsão de
+  // luxo vizinho. 120 alcança ~800-1000 m e traz casas de padrão normal, que diluem
+  // a mediana. É o limite, não o raio, que define o quão longe a busca chega.
+  const limit       = opts.limit       ?? 120;
   const { rows } = await pool.query(SQL_RADIUS, [ponto, raioMetros, janelaMeses, limit]);
   return rows.map(mapRow);
 }
