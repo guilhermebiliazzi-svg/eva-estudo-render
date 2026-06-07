@@ -97,6 +97,7 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const iqrK          = opts.iqrK          ?? 1.5;   // TRAVA 2: largura da cerca IQR (Tukey)
   const minCompsTrim  = opts.minCompsTrim  ?? 6;     //          se o trim deixar < isto, não aplica
   const plottageExp   = opts.plottageExp   ?? 0;     // TRAVA 3: 0 = desligada
+  const tetoMediana   = opts.tetoMediana   ?? 1.6;   // TRAVA 4: descarta comps com R$/m² acima de N× a mediana local (corta luxo vizinho)
 
   const hoje   = new Date();
   const r      = ref ? parseDataBR(ref) : null;
@@ -156,6 +157,17 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   let trimRelaxado = false;
   if (trimmed.length >= minCompsTrim) { usados = trimmed; } else { trimRelaxado = true; }
 
+  // ---- TRAVA 4: teto relativo — descarta comps com R$/m² muito acima da mediana local ----
+  // (vendas de luxo/atípicas que sobrevivem ao IQR quando a amostra tem cauda larga;
+  //  é o que segura o valor estável independente do raio/ponto da busca)
+  let tetoRelaxado = false;
+  if (tetoMediana > 0 && usados.length >= minCompsTrim) {
+    const arrTeto = usados.map(x => x.rs_num).sort((a, b) => a - b);
+    const medLocal = quantil(arrTeto, 0.50);
+    const semLuxo = usados.filter(x => x.rs_num <= tetoMediana * medLocal);
+    if (semLuxo.length >= minCompsTrim) { usados = semLuxo; } else { tetoRelaxado = true; }
+  }
+
   const removidos = todos.length - usados.length;
 
   // 2) mediana / p25 / p75 sobre o conjunto JÁ SELECIONADO
@@ -202,6 +214,8 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
       cerca_iqr: [Math.round(cercaLo), Math.round(cercaHi)],
       trim_relaxado: trimRelaxado,
       plottage_exp: plottageExp,
+      teto_mediana: tetoMediana,
+      teto_relaxado: tetoRelaxado,
       n_final: usados.length,
       removidos,
     },
