@@ -98,11 +98,10 @@ async function fetchCompsByStreet(pool, rua, numero, opts = {}) {
  * @param opts  { raioMetros=800, janelaMeses=36, limit=60 }
  */
 async function fetchCompsByRadius(pool, ponto, opts = {}) {
-  // TETO DE RAIO: acima de ~600 m a busca passa a puxar bolsos de valor diferente
-  // (ex.: ruas de alto padrão vizinhas) que inflam a mediana do R$/m² de terreno.
-  // Limitar aqui mantém o comparável na vizinhança imediata — sai mais defensável.
-  const MAX_RAIO_METROS = 600;
-  const raioMetros  = Math.min(opts.raioMetros ?? MAX_RAIO_METROS, MAX_RAIO_METROS);
+  // RAIO DA BUSCA: ~800 m. Raio pequeno (ex.: 500 m) fica dominado pelo bolso de
+  // alto padrão imediatamente vizinho (que infla a mediana); 700–900 m traz uma
+  // amostra representativa do entorno. Piso 700, teto 1000.
+  const raioMetros  = Math.min(Math.max(opts.raioMetros ?? 800, 700), 1000);
   const janelaMeses = opts.janelaMeses ?? 36;
   const limit       = opts.limit       ?? 60;
   const { rows } = await pool.query(SQL_RADIUS, [ponto, raioMetros, janelaMeses, limit]);
