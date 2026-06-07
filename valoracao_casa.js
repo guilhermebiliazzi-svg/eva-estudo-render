@@ -97,7 +97,8 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const iqrK          = opts.iqrK          ?? 1.5;   // TRAVA 2: largura da cerca IQR (Tukey)
   const minCompsTrim  = opts.minCompsTrim  ?? 6;     //          se o trim deixar < isto, não aplica
   const plottageExp   = opts.plottageExp   ?? 0;     // TRAVA 3: 0 = desligada
-  const tetoMediana   = opts.tetoMediana   ?? 1.6;   // TRAVA 4: descarta comps com R$/m² acima de N× a mediana local (corta luxo vizinho)
+  const tetoMediana   = opts.tetoMediana   ?? 1.4;   // TRAVA 4: descarta comps com R$/m² acima de N× a mediana local (corta luxo vizinho)
+  const valorMinimo   = opts.valorMinimo   ?? 50000; // descarta vendas-lixo (ex.: R$ 1.700 = erro de cadastro)
 
   const hoje   = new Date();
   const r      = ref ? parseDataBR(ref) : null;
@@ -119,7 +120,7 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
     const terreno   = Number(c.area_terreno);
     const constr    = Number(c.area_construida || 0);
     const valorOrig = Number(c.valor);
-    if (!(terreno > 0) || !(valorOrig > 0)) continue;
+    if (!(terreno > 0) || !(valorOrig >= valorMinimo)) continue;
     if (!Number.isFinite(c.idade)) semIdadeComp = true;
 
     const fator      = ipcaFactor(...Object.values(parseDataBR(c.data)), anoRef, mesRef);
