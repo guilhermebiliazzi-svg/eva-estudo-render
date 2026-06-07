@@ -113,7 +113,8 @@ function buildEstudoCasa(data, opts={}){
   // ===== SLIDE 4 — O CORRETOR =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"03 · O Corretor"); title(s,"Quem conduz a venda");
-    if(co.foto) s.addImage({path:co.foto,x:MX,y:1.7,w:3.0,h:3.0,sizing:{type:"cover",w:3.0,h:3.0}});
+    const fotoCorretor = co.foto || co.foto_url;   // EVA envia foto_url
+    if(fotoCorretor) s.addImage({path:fotoCorretor,x:MX,y:1.7,w:3.0,h:3.0,sizing:{type:"cover",w:3.0,h:3.0}});
     s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.7,w:3.0,h:3.0,fill:{type:"none"},line:{color:LINE,width:1}});
     const tx=4.05;
     s.addText(co.nome||"",{x:tx,y:1.8,w:5.4,h:0.6,fontFace:HEAD,fontSize:28,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});

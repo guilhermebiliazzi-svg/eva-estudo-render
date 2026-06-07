@@ -18,7 +18,27 @@ const { buildEstudoCasa } = require("./estudo_casa_generator");
 // CUB — custo de reposição da construção (R$/m² construído) p/ o método do custo.
 // >>> PLACEHOLDER: ajuste ao CUB-SP (SINDUSCON-SP) do padrão construtivo real. <<<
 // Override por requisição via body.cub.
-const CUB_PADRAO_SP = 2700;
+// CUB R1 (residência unifamiliar), R$/m² construído, SEM desoneração — fallback se a tabela cub_sp falhar.
+// Valor de referência: Fev/2026 R1-Normal (SindusCon-SP). Atualizado mensalmente na tabela cub_sp pelo cron.
+const CUB_PADRAO_SP = 2562.62;
+
+// padrão construtivo (body.padrao) -> coluna da tabela cub_sp
+const PADRAO_COL = { baixo: "r1_baixo", normal: "r1_normal", alto: "r1_alto" };
+
+// Resolve o CUB na ordem: 1) override explícito body.cub; 2) tabela cub_sp pelo padrão; 3) fallback constante.
+async function resolverCub(pool, body) {
+  if (Number(body.cub) > 0) return Number(body.cub);                 // override explícito
+  const padrao = String(body.padrao || "normal").toLowerCase();
+  const col = PADRAO_COL[padrao] || PADRAO_COL.normal;               // whitelist (não interpola input cru)
+  if (pool) {
+    try {
+      const { rows } = await pool.query(`SELECT ${col} AS cub FROM cub_sp ORDER BY mes_ref DESC LIMIT 1`);
+      const v = rows[0] && Number(rows[0].cub);
+      if (v > 0) return v;
+    } catch (e) { console.error("resolverCub: falha lendo cub_sp (usando fallback):", e.message); }
+  }
+  return CUB_PADRAO_SP;                                              // fallback
+}
 
 // ---- formatadores de exibição ----
 const milhar = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -78,13 +98,14 @@ function montarImovel(body) {
 }
 
 // núcleo: recebe comps já buscados + dados do imóvel -> PPTX
-async function gerarEstudoCasa({ comps, body, assets, out }) {
+async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
   const imovel = montarImovel(body);
+  const cub = await resolverCub(pool, body);
   const valoracao = buildValoracaoCasa({
     comps,
     avaliando: { area_terreno: body.area_terreno, area_construida: body.area_construida, idade: imovel.idade_anos },
     ref: body.ref || body.estudo_data,
-    opts: { cub: Number(body.cub) || CUB_PADRAO_SP },
+    opts: { cub },
   });
   // tabela do slide 9 usa os comps ENRIQUECIDOS (R$/m² de terreno LIMPO) p/ casar com o headline
   const compsFmt = formatComps(valoracao.comps || comps, body.rua);
@@ -112,7 +133,7 @@ async function gerarEstudoCasaFromDB({ pool, assets, out, ...body }) {
     if (!body.rua || body.numero == null) throw new Error("rua e numero são obrigatórios (modo rua+número)");
     comps = await fetchCompsByStreet(pool, body.rua, body.numero, { raio: body.raio, janelaMeses: body.janelaMeses });
   }
-  return gerarEstudoCasa({ comps, body, assets, out });
+  return gerarEstudoCasa({ comps, body, assets, out, pool });
 }
 
 module.exports = { gerarEstudoCasa, gerarEstudoCasaFromDB, formatComps, montarImovel };
