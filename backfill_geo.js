@@ -3,42 +3,33 @@
  *
  * Casa o sql_key (setor+quadra+lote) com a camada oficial geoportal:lote_cidadao (WFS),
  * pega o CENTROIDE do polígono do lote (EPSG:31983) e grava como ponto 4326 em `geom`.
- * Campos do GeoSampa: cd_setor_fiscal (3) · cd_quadra_fiscal (3) · cd_lote (4) -> sql_key.
+ * Campos GeoSampa: cd_setor_fiscal (3) · cd_quadra_fiscal (3) · cd_lote (4) -> sql_key.
  *
- * Roda EM LOTE por (setor, quadra): uma chamada WFS por quadra traz TODOS os lotes do
- * quarteirão de uma vez (muito menos requisições que 1-por-lote). Idempotente e resumível:
- * só processa quadras que ainda têm casas sem geom (geom IS NULL).
+ * EM LOTE por (setor, quadra): uma chamada WFS traz todos os lotes do quarteirão.
+ * Idempotente e resumível (só processa quadras com casas sem geom).
  *
- * Universo: casas de rua residenciais com terreno (o universo de comparáveis do Método 2).
- * Exposto via rota /backfill-geo (ver server.js) — chame repetido até restantes = 0.
+ * ROBUSTEZ: timeout curto e TETO DE TEMPO por chamada (maxSeconds) — a chamada HTTP
+ * SEMPRE retorna em ~maxSeconds, nunca fica pendurada, mesmo se o GeoSampa estiver lento.
+ * Chame /backfill-geo repetido até restantes = 0.
  *
- * Requer Node 18+ (fetch global). Requer PostGIS habilitado e a coluna geom geometry(Point,4326).
+ * Requer Node 18+ (fetch global), PostGIS, e a coluna geom geometry(Point,4326).
  */
 
 const WFS = "http://wfs.geosampa.prefeitura.sp.gov.br/geoserver/geoportal/ows";
 const COMP_FILTER = `descricao_uso LIKE 'RESID%' AND fracao_ideal = 1 AND area_terreno::numeric > 0`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// busca todos os lotes de uma quadra fiscal no GeoSampa (GeoJSON, EPSG:31983)
-async function fetchQuadra(setor, quadra, { timeoutMs = 30000, tries = 4 } = {}) {
+// busca os lotes de uma quadra fiscal (GeoJSON, EPSG:31983). Falha rápido: 1 tentativa, timeout curto.
+async function fetchQuadra(setor, quadra, { timeoutMs = 10000 } = {}) {
   const cql = `cd_setor_fiscal='${setor}' AND cd_quadra_fiscal='${quadra}'`;
   const url = `${WFS}?service=WFS&version=1.0.0&request=GetFeature&typeName=geoportal:lote_cidadao`
             + `&outputFormat=application/json&srsName=EPSG:31983&CQL_FILTER=${encodeURIComponent(cql)}`;
-  for (let attempt = 1; attempt <= tries; attempt++) {
-    try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await r.json();
-      return j.features || [];
-    } catch (e) {
-      if (attempt === tries) throw e;
-      await sleep(1000 * attempt);
-    }
-  }
-  return [];
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  return j.features || [];
 }
 
-// quantas quadras (setor+quadra) ainda têm casas sem geom
 async function restantes(pool) {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS n FROM (
@@ -50,12 +41,16 @@ async function restantes(pool) {
 }
 
 /**
- * Processa um lote de quadras. Retorna { processadas, carimbadas, restantes, erros }.
- * @param opts { limit=100, sleepMs=250 }
+ * Processa quadras até estourar o limite OU o teto de tempo. Sempre retorna rápido.
+ * @param opts { limit=200, sleepMs=120, maxSeconds=20, timeoutMs=10000 }
+ * @returns { processadas, carimbadas, erros, restantes, parou_por_tempo, amostra_erro }
  */
 async function runBackfillBatch(pool, opts = {}) {
-  const limit   = opts.limit   ?? 100;
-  const sleepMs = opts.sleepMs ?? 250;
+  const limit     = opts.limit     ?? 200;
+  const sleepMs   = opts.sleepMs   ?? 120;
+  const maxMs     = (opts.maxSeconds ?? 20) * 1000;
+  const timeoutMs = opts.timeoutMs ?? 10000;
+  const t0 = Date.now();
 
   const { rows: quadras } = await pool.query(
     `SELECT DISTINCT setor, quadra FROM vendidos_itbi_usados
@@ -64,11 +59,13 @@ async function runBackfillBatch(pool, opts = {}) {
       LIMIT $1`, [limit]
   );
 
-  let carimbadas = 0, erros = 0;
+  let processadas = 0, carimbadas = 0, erros = 0, amostraErro = null, parouPorTempo = false;
   for (const { setor, quadra } of quadras) {
+    if (Date.now() - t0 > maxMs) { parouPorTempo = true; break; }
+    processadas++;
     let feats;
-    try { feats = await fetchQuadra(setor, quadra); }
-    catch (e) { erros++; await sleep(sleepMs); continue; }
+    try { feats = await fetchQuadra(setor, quadra, { timeoutMs }); }
+    catch (e) { erros++; if (!amostraErro) amostraErro = `${setor}/${quadra}: ${e.message}`; continue; }
 
     for (const f of feats) {
       const p = f.properties || {};
@@ -87,7 +84,7 @@ async function runBackfillBatch(pool, opts = {}) {
     await sleep(sleepMs);
   }
 
-  return { processadas: quadras.length, carimbadas, erros, restantes: await restantes(pool) };
+  return { processadas, carimbadas, erros, restantes: await restantes(pool), parou_por_tempo: parouPorTempo, amostra_erro: amostraErro };
 }
 
 module.exports = { runBackfillBatch, restantes, fetchQuadra };
