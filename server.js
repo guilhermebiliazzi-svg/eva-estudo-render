@@ -7,6 +7,7 @@
  *   ASSETS_DIR    (default ./assets — ativos fixos da marca)
  *   DATABASE_URL  (Supabase Postgres; necessário p/ buscar vendidos pela buildingKey
  *                  e p/ persistir amostras aprovadas por phone)
+ *   ANTHROPIC_API_KEY  (necessário p/ a rota /parecer)
  *
  * Endpoints:
  *   POST /amostra   body = { url, subject }                          → 1 amostra
@@ -26,6 +27,7 @@ const path = require("path");
 const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 const { runBackfillBatch } = require("./backfill_geo");
+const { gerarParecer } = require("./parecer");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -77,6 +79,18 @@ app.post("/amostras", async (req, res) => {
     }
     res.json({ amostras, aprovacao: montarAprovacao(amostras) });
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
+});
+
+// === Parecer de diligência (tijolo C) ===
+// Recebe os FATOS montados pelo n8n, chama o Claude, valida e devolve o JSON do parecer.
+app.post("/parecer", async (req, res) => {
+  try {
+    const saida = await gerarParecer(req.body || {});
+    res.json(saida);
+  } catch (e) {
+    console.error("erro /parecer:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
 });
 
 app.post("/estudo", async (req, res) => {
