@@ -31,6 +31,7 @@ const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 const { runBackfillBatch } = require("./backfill_geo");
 const { gerarParecer } = require("./parecer");
+const { auditarCertidao } = require("./auditor_cnd");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -46,7 +47,24 @@ if (process.env.DATABASE_URL) {
 // Espelha o nó "Montar URL eSAJ" do WF-15: numero_pedido + pedido_data + CPF/CNPJ.
 function _maskCpf(d){const s=String(d).replace(/\D/g,"").padStart(11,"0");return s.slice(0,3)+"."+s.slice(3,6)+"."+s.slice(6,9)+"-"+s.slice(9,11);}
 function _maskCnpj(d){const s=String(d).replace(/\D/g,"").padStart(14,"0");return s.slice(0,2)+"."+s.slice(2,5)+"."+s.slice(5,8)+"/"+s.slice(8,12)+"-"+s.slice(12,14);}
-function _brDate(v){if(!v)return "";const s=String(v);const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"/"+m[2]+"/"+m[1];const d=new Date(v);if(!isNaN(d.getTime()))return String(d.getUTCDate()).padStart(2,"0")+"/"+String(d.getUTCMonth()+1).padStart(2,"0")+"/"+d.getUTCFullYear();return "";}
+function _brDate(v){
+  if (!v) return "";
+  // Data pura YYYY-MM-DD (sem hora): usa direto, sem conversão de fuso.
+  const pure = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (pure) return pure[3] + "/" + pure[2] + "/" + pure[1];
+  // timestamptz vem em UTC; o TJSP registra a data em horário LOCAL de SP.
+  // Sem converter o fuso, pedidos feitos à noite em SP (madrugada UTC) caem no dia seguinte.
+  const norm = String(v).replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/([+-]\d\d)$/, "$1:00");
+  const d = (v instanceof Date) ? v : new Date(norm);
+  if (isNaN(d.getTime())) {
+    const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3] + "/" + m[2] + "/" + m[1] : "";
+  }
+  const p = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(d);
+  const g = t => (p.find(x => x.type === t) || {}).value || "";
+  const dd = g("day"), mm = g("month"), yy = g("year");
+  return (dd && mm && yy) ? dd + "/" + mm + "/" + yy : "";
+}
 function _esajUrl(numero_pedido, pedido_data, documento){
   const np = numero_pedido ? String(numero_pedido).trim() : "";
   const pd = _brDate(pedido_data);
@@ -85,11 +103,11 @@ async function injetarLinksEsaj(pool, fatos){
     if (normTit(r.titular) && !byTit.has(kt)) byTit.set(kt, url);
   }
   for (const it of fatos.inventario_certidoes) {
-    if (it.url || it.url_download) continue;        // já tem PDF ou link
+    if (it.url) continue;                            // já tem PDF no Drive: não mexe
     const rotulo = it.item || it.sheet_label || "";
     let url = byDoc.get(normDoc(it.documento) + "||" + rotulo);
     if (!url) url = byTit.get(normTit(it.titular) + "||" + rotulo);
-    if (url) it.url_download = url;
+    if (url) it.url_download = url;                  // SOBRESCREVE: Render tem a palavra final (data em fuso SP)
   }
 }
 
@@ -200,6 +218,33 @@ app.post("/parecer", async (req, res) => {
     res.json({ ...saida, parecer_id, pdf_url });
   } catch (e) {
     console.error("erro /parecer:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Fallback de leitura de CND via Claude. O WF-07 chama isto quando o Gemini falha.
+// Body: { pdfBase64 | fileBase64, tipo, titular, documento, candidatas?, nome? }
+// Devolve o mesmo formato de JSON da auditoria do WF-07 (drop-in).
+app.post("/auditar-certidao", async (req, res) => {
+  const token = process.env.PARECER_TOKEN;
+  if (token && req.headers["x-parecer-token"] !== token) {
+    return res.status(401).json({ error: "nao autorizado" });
+  }
+  try {
+    const b = req.body || {};
+    const fileBase64 = b.pdfBase64 || b.fileBase64 || b.base64 || null;
+    if (!fileBase64) return res.status(400).json({ error: "pdfBase64/fileBase64 ausente" });
+    const out = await auditarCertidao({
+      fileBase64,
+      tipo: b.tipo || null,
+      titular: b.titular || null,
+      documento: b.documento || null,
+      candidatas: Array.isArray(b.candidatas) ? b.candidatas : null,
+      nome: b.nome || null,
+    });
+    res.json(out);
+  } catch (e) {
+    console.error("erro /auditar-certidao:", e && e.message);
     res.status(500).json({ error: String((e && e.message) || e) });
   }
 });
