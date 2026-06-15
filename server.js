@@ -42,6 +42,57 @@ if (process.env.DATABASE_URL) {
   pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 }
 
+// --- Link de download e-SAJ montado pelo PRÓPRIO Render (independe do n8n) ---
+// Espelha o nó "Montar URL eSAJ" do WF-15: numero_pedido + pedido_data + CPF/CNPJ.
+function _maskCpf(d){const s=String(d).replace(/\D/g,"").padStart(11,"0");return s.slice(0,3)+"."+s.slice(3,6)+"."+s.slice(6,9)+"-"+s.slice(9,11);}
+function _maskCnpj(d){const s=String(d).replace(/\D/g,"").padStart(14,"0");return s.slice(0,2)+"."+s.slice(2,5)+"."+s.slice(5,8)+"/"+s.slice(8,12)+"-"+s.slice(12,14);}
+function _brDate(v){if(!v)return "";const s=String(v);const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"/"+m[2]+"/"+m[1];const d=new Date(v);if(!isNaN(d.getTime()))return String(d.getUTCDate()).padStart(2,"0")+"/"+String(d.getUTCMonth()+1).padStart(2,"0")+"/"+d.getUTCFullYear();return "";}
+function _esajUrl(numero_pedido, pedido_data, documento){
+  const np = numero_pedido ? String(numero_pedido).trim() : "";
+  const pd = _brDate(pedido_data);
+  const dig = String(documento || "").replace(/\D/g, "");
+  if (!np || !pd || !(dig.length === 11 || dig.length === 14)) return null;
+  const parts = ["entity.nuPedido=" + encodeURIComponent(np), "entity.dtPedido=" + encodeURIComponent(pd)];
+  if (dig.length === 11) { parts.push("entity.tpPessoa=F"); parts.push("entity.nuCpf=" + encodeURIComponent(_maskCpf(dig))); }
+  else { parts.push("entity.tpPessoa=J"); parts.push("entity.nuCnpj=" + encodeURIComponent(_maskCnpj(dig))); }
+  return "https://esaj.tjsp.jus.br/sco/realizarDownload.do?" + parts.join("&");
+}
+const _ESAJ_TIPOS = ["tjsp_civeis","tjsp_falencia","tjsp_inventarios","tjsp_criminais","tjsp_exec_crim"];
+
+// Preenche url_download das distribuições e-SAJ ainda em aguardando_email, lendo o
+// protocolo direto do banco. Escopa pela diligência quando o fatos traz diligencia_id.
+// Casa cada item do inventário por (documento + rótulo) e, na falta de documento, por
+// (titular + rótulo). Nunca lança: em erro, deixa o inventário como veio.
+async function injetarLinksEsaj(pool, fatos){
+  if (!pool || !fatos || !Array.isArray(fatos.inventario_certidoes) || !fatos.inventario_certidoes.length) return;
+  const params = [_ESAJ_TIPOS];
+  let sql = "SELECT sheet_label, documento, titular, numero_pedido, pedido_data " +
+            "FROM certidoes_status WHERE tipo = ANY($1) AND status = 'aguardando_email' " +
+            "AND numero_pedido IS NOT NULL AND numero_pedido <> '' AND pedido_data IS NOT NULL";
+  if (fatos.diligencia_id) { sql += " AND diligencia_id = $2"; params.push(fatos.diligencia_id); }
+  sql += " ORDER BY atualizado_em DESC";
+  const { rows } = await pool.query(sql, params);
+  const normDoc = d => String(d || "").replace(/\D/g, "");
+  const normTit = t => String(t || "").trim().toUpperCase().replace(/\s+/g, " ");
+  const byDoc = new Map();   // documento||rótulo -> url (mais recente vence)
+  const byTit = new Map();   // titular||rótulo  -> url (mais recente vence)
+  for (const r of rows) {
+    const url = _esajUrl(r.numero_pedido, r.pedido_data, r.documento);
+    if (!url) continue;
+    const kd = normDoc(r.documento) + "||" + (r.sheet_label || "");
+    const kt = normTit(r.titular) + "||" + (r.sheet_label || "");
+    if (normDoc(r.documento) && !byDoc.has(kd)) byDoc.set(kd, url);
+    if (normTit(r.titular) && !byTit.has(kt)) byTit.set(kt, url);
+  }
+  for (const it of fatos.inventario_certidoes) {
+    if (it.url || it.url_download) continue;        // já tem PDF ou link
+    const rotulo = it.item || it.sheet_label || "";
+    let url = byDoc.get(normDoc(it.documento) + "||" + rotulo);
+    if (!url) url = byTit.get(normTit(it.titular) + "||" + rotulo);
+    if (url) it.url_download = url;
+  }
+}
+
 const app = express();
 app.use(express.json({ limit: "8mb" }));
 
@@ -141,6 +192,8 @@ app.post("/parecer", async (req, res) => {
   }
   try {
     const fatos = req.body || {};
+    // Render monta o link e-SAJ das distribuições pendentes (não depende do n8n).
+    if (pool) { try { await injetarLinksEsaj(pool, fatos); } catch (e) { console.error("injetarLinksEsaj:", e && e.message); } }
     const saida = await gerarParecer(fatos);
     const parecer_id = crypto.randomUUID();
     const pdf_url = `${SELF_URL}/parecer-view/${parecer_id}`;
