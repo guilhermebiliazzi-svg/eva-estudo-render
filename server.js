@@ -9,8 +9,7 @@
  *                  e p/ persistir amostras aprovadas por phone)
  *   ANTHROPIC_API_KEY  (necessário p/ /parecer)
  *   PARECER_TOKEN      (recomendado p/ /parecer — segredo compartilhado com o n8n)
- *   SUPABASE_SERVICE_KEY (necessário p/ /parecer subir o HTML no Storage; service_role key)
- *   SUPABASE_URL       (opcional; default https://nrgsutbwxysgzgaixlhe.supabase.co)
+ *   SELF_URL           (opcional; default https://eva-estudo-render.onrender.com — base do link do parecer)
  *
  * Endpoints:
  *   POST /amostra   body = { url, subject }                          → 1 amostra
@@ -35,8 +34,8 @@ const { gerarParecer } = require("./parecer");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
-const SUPABASE_URL = (process.env.SUPABASE_URL || "https://nrgsutbwxysgzgaixlhe.supabase.co").replace(/\/+$/, "");
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || "";
+// URL pública deste serviço (usada para montar o link do parecer servido pelo Render)
+const SELF_URL = (process.env.SELF_URL || "https://eva-estudo-render.onrender.com").replace(/\/+$/, "");
 let pool = null;
 if (process.env.DATABASE_URL) {
   const { Pool } = require("pg");
@@ -88,31 +87,31 @@ app.post("/amostras", async (req, res) => {
 });
 
 // === Parecer de diligência (tijolo C) ===
-// Sobe o HTML do parecer no Supabase Storage com Content-Type text/html.
-// (O n8n não consegue setar o content-type direito no upload; aqui o fetch controla o header,
-//  então o navegador renderiza o parecer em vez de mostrar texto cru.)
-async function uploadParecerHTML(diligenciaId, parecerId, html) {
-  if (!SUPABASE_SERVICE_KEY) throw new Error("SUPABASE_SERVICE_KEY não configurada no Render");
-  const dest = `${SUPABASE_URL}/storage/v1/object/pareceres/${diligenciaId}/${parecerId}.html`;
-  const r = await fetch(dest, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      "Content-Type": "text/html; charset=utf-8",
-      "x-upsert": "true",
-    },
-    body: html,
-  });
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    throw new Error(`Supabase Storage HTTP ${r.status}: ${t}`);
+// O HTML do parecer é SERVIDO pelo próprio Render (Content-Type fixado no Express),
+// porque o bucket público do Supabase serve arquivos com content-type travado e não
+// renderiza HTML. A fonte do HTML é a coluna `saida._html` da tabela `pareceres`.
+app.get("/parecer-view/:id", async (req, res) => {
+  try {
+    if (!pool) return res.status(500).type("text/plain").send("DB indisponível");
+    const { rows } = await pool.query(
+      "SELECT saida FROM pareceres WHERE id = ($1)::uuid LIMIT 1",
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).type("text/plain").send("Parecer não encontrado");
+    let saida = rows[0].saida;
+    if (typeof saida === "string") { try { saida = JSON.parse(saida); } catch (_) {} }
+    const html = saida && saida._html;
+    if (!html) return res.status(404).type("text/plain").send("HTML do parecer indisponível");
+    res.set("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  } catch (e) {
+    return res.status(500).type("text/plain").send("erro: " + String((e && e.message) || e));
   }
-  return `${SUPABASE_URL}/storage/v1/object/public/pareceres/${diligenciaId}/${parecerId}.html`;
-}
+});
 
-// Recebe os FATOS montados pelo n8n, chama o Claude, valida, sobe o HTML e devolve
-// { ...saida, parecer_id, pdf_url }. O n8n só persiste e responde — não faz upload.
+// Recebe os FATOS montados pelo n8n, chama o Claude, valida e devolve
+// { ...saida, parecer_id, pdf_url }. O HTML é guardado em saida._html (persistido no DB
+// pelo n8n) e servido por GET /parecer-view/:id. pdf_url já aponta para essa rota.
 app.post("/parecer", async (req, res) => {
   // segredo compartilhado com o n8n (só exige se PARECER_TOKEN estiver configurada)
   const token = process.env.PARECER_TOKEN;
@@ -123,11 +122,7 @@ app.post("/parecer", async (req, res) => {
     const fatos = req.body || {};
     const saida = await gerarParecer(fatos);
     const parecer_id = crypto.randomUUID();
-    const diligencia_id = fatos.diligencia_id || null;
-    let pdf_url = null;
-    if (saida._html && diligencia_id) {
-      pdf_url = await uploadParecerHTML(diligencia_id, parecer_id, saida._html);
-    }
+    const pdf_url = `${SELF_URL}/parecer-view/${parecer_id}`;
     res.json({ ...saida, parecer_id, pdf_url });
   } catch (e) {
     console.error("erro /parecer:", e);
