@@ -225,11 +225,8 @@ app.post("/parecer", async (req, res) => {
 // Fallback de leitura de CND via Claude. O WF-07 chama isto quando o Gemini falha.
 // Body: { pdfBase64 | fileBase64, tipo, titular, documento, candidatas?, nome? }
 // Devolve o mesmo formato de JSON da auditoria do WF-07 (drop-in).
+// Endpoint interno (chamado pelo n8n); sem token pra não precisar coordenar segredo.
 app.post("/auditar-certidao", async (req, res) => {
-  const token = process.env.PARECER_TOKEN;
-  if (token && req.headers["x-parecer-token"] !== token) {
-    return res.status(401).json({ error: "nao autorizado" });
-  }
   try {
     const b = req.body || {};
     const fileBase64 = b.pdfBase64 || b.fileBase64 || b.base64 || null;
