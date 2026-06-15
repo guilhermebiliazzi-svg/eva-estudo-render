@@ -57,7 +57,8 @@ function montarPrompt({ tipo, titular, documento, candidatas, nome, dataAtual })
     "- Nome do arquivo (pista de tipo): " + (nome || "(sem nome)") + "\n\n" +
     ctxCandidatas +
     "==== REGRAS DE MATCHING (qual tipo o arquivo representa) ====\n" +
-    "- 'UNIFICADA' (TRF/CJF) engloba cível e criminal -> trf_civel se estiver entre as candidatas.\n" +
+    "- 'UNIFICADA' (TRF/CJF): NÃO colapse tudo em trf_civel. Classifique pelo TÍTULO do documento: título com CRIMINAL -> trf_criminal; título com CÍVEL/CIVIL -> trf_civel. Desempate pelo nome do arquivo (TRF_CRIMINAL_ -> trf_criminal; TRF_CIVEL_ -> trf_civel). Escolha a candidata do tipo correspondente.\n" +
+    "- Trabalhista TRT2: 'PJe'/'eletrônica'/'Processo Eletrônico' -> trt2_digital; 'PROCESSOS FÍSICOS' -> trt2_fisico. São candidatas DISTINTAS — não troque uma pela outra.\n" +
     "- TJSP cível tem DOIS tipos: (a) tjsp_civel_1g (sistema EPROC, 1º grau) — contém 'Comarcas e Turmas Recursais', 'Primeiro Grau', '1º Grau' ou 'sistema eproc'; (b) tjsp_civeis (e-SAJ/SAJ SGC) — menciona 'SAJ' ou é certidão geral sem os marcadores de eproc.\n" +
     "- Diferença ortográfica pequena (LTDA vs EIRELI) NÃO é divergência. CENPROT normalmente não traz o nome do titular.\n" +
     "- Pesquisa pela raiz do CNPJ quando o esperado tinha sufixo de filial NÃO é divergência.\n" +
