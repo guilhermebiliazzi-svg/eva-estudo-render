@@ -7,7 +7,10 @@
  *   ASSETS_DIR    (default ./assets — ativos fixos da marca)
  *   DATABASE_URL  (Supabase Postgres; necessário p/ buscar vendidos pela buildingKey
  *                  e p/ persistir amostras aprovadas por phone)
- *   ANTHROPIC_API_KEY  (necessário p/ a rota /parecer)
+ *   ANTHROPIC_API_KEY  (necessário p/ /parecer)
+ *   PARECER_TOKEN      (recomendado p/ /parecer — segredo compartilhado com o n8n)
+ *   SUPABASE_SERVICE_KEY (necessário p/ /parecer subir o HTML no Storage; service_role key)
+ *   SUPABASE_URL       (opcional; default https://nrgsutbwxysgzgaixlhe.supabase.co)
  *
  * Endpoints:
  *   POST /amostra   body = { url, subject }                          → 1 amostra
@@ -24,6 +27,7 @@ const express = require("express");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 const { runBackfillBatch } = require("./backfill_geo");
@@ -31,6 +35,8 @@ const { gerarParecer } = require("./parecer");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
+const SUPABASE_URL = (process.env.SUPABASE_URL || "https://nrgsutbwxysgzgaixlhe.supabase.co").replace(/\/+$/, "");
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || "";
 let pool = null;
 if (process.env.DATABASE_URL) {
   const { Pool } = require("pg");
@@ -82,11 +88,47 @@ app.post("/amostras", async (req, res) => {
 });
 
 // === Parecer de diligência (tijolo C) ===
-// Recebe os FATOS montados pelo n8n, chama o Claude, valida e devolve o JSON do parecer.
+// Sobe o HTML do parecer no Supabase Storage com Content-Type text/html.
+// (O n8n não consegue setar o content-type direito no upload; aqui o fetch controla o header,
+//  então o navegador renderiza o parecer em vez de mostrar texto cru.)
+async function uploadParecerHTML(diligenciaId, parecerId, html) {
+  if (!SUPABASE_SERVICE_KEY) throw new Error("SUPABASE_SERVICE_KEY não configurada no Render");
+  const dest = `${SUPABASE_URL}/storage/v1/object/pareceres/${diligenciaId}/${parecerId}.html`;
+  const r = await fetch(dest, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      "Content-Type": "text/html; charset=utf-8",
+      "x-upsert": "true",
+    },
+    body: html,
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`Supabase Storage HTTP ${r.status}: ${t}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/pareceres/${diligenciaId}/${parecerId}.html`;
+}
+
+// Recebe os FATOS montados pelo n8n, chama o Claude, valida, sobe o HTML e devolve
+// { ...saida, parecer_id, pdf_url }. O n8n só persiste e responde — não faz upload.
 app.post("/parecer", async (req, res) => {
+  // segredo compartilhado com o n8n (só exige se PARECER_TOKEN estiver configurada)
+  const token = process.env.PARECER_TOKEN;
+  if (token && req.headers["x-parecer-token"] !== token) {
+    return res.status(401).json({ error: "nao autorizado" });
+  }
   try {
-    const saida = await gerarParecer(req.body || {});
-    res.json(saida);
+    const fatos = req.body || {};
+    const saida = await gerarParecer(fatos);
+    const parecer_id = crypto.randomUUID();
+    const diligencia_id = fatos.diligencia_id || null;
+    let pdf_url = null;
+    if (saida._html && diligencia_id) {
+      pdf_url = await uploadParecerHTML(diligencia_id, parecer_id, saida._html);
+    }
+    res.json({ ...saida, parecer_id, pdf_url });
   } catch (e) {
     console.error("erro /parecer:", e);
     res.status(500).json({ error: String((e && e.message) || e) });
