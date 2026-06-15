@@ -179,8 +179,9 @@ function s2(r){
     ${chk(r.constricao,"Sem constrição","Constrição","Não há penhora, arresto ou sequestro averbado.","Há penhora, arresto ou sequestro averbado.")}
     ${chk(r.premonitoria,"Sem premonitória","Premonitória","Não há averbação do art. 828 do CPC vinculando ação ao bem.","Há averbação do art. 828 do CPC vinculando ação ao bem.")}
   </div>`;
-  const concl = r.desembaracado
-    ? "Conclusão parcial: o imóvel está desembaraçado; nenhum apontamento do vendedor alcançou a matrícula."
+  const _desemb = (r.desembaracado === true) || (!r.onus_reais && !r.constricao && !r.premonitoria);
+  const concl = _desemb
+    ? "Conclusão parcial: o imóvel está desembaraçado; não incide gravame vigente, constrição ou averbação premonitória sobre ele."
     : "Conclusão parcial: há gravame ou constrição incidente sobre o imóvel — ver a análise acima.";
   return `<section><div class="snum"><div class="n">2</div><h2>Situação registral do imóvel</h2></div>
     ${r.analise?`<p>${esc(r.analise)}</p>`:""}${r.cadeia_dominial?`<p>${esc(r.cadeia_dominial)}</p>`:""}
