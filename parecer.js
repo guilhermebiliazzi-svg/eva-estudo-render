@@ -10,6 +10,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { renderParecerHTML } = require("./parecer_render");
 
 const MODEL = process.env.PARECER_MODEL || "claude-opus-4-8";
 const PROMPT_PATH = process.env.PROMPT_PARECER || path.join(__dirname, "prompt_parecer.md");
@@ -48,7 +49,6 @@ async function chamarClaude(fatos) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 16000,
-      temperature: 0,
       system,
       messages: [{ role: "user", content: userMsg }],
     }),
@@ -111,6 +111,7 @@ async function gerarParecer(fatos) {
   if (!fatos || typeof fatos !== "object") throw new Error("FATOS ausentes ou inválidos");
   const saida = await chamarClaude(fatos);
   saida._validacao = validar(saida);
+  try { saida._html = renderParecerHTML(saida, fatos); } catch (e) { saida._html_erro = String(e && e.message || e); }
   return saida;
 }
 
