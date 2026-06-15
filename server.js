@@ -94,14 +94,35 @@ app.get("/parecer-view/:id", async (req, res) => {
   try {
     if (!pool) return res.status(500).type("text/plain").send("DB indisponível");
     const { rows } = await pool.query(
-      "SELECT saida FROM pareceres WHERE id = ($1)::uuid LIMIT 1",
+      "SELECT saida, status, aprovado_em FROM pareceres WHERE id = ($1)::uuid LIMIT 1",
       [req.params.id]
     );
     if (!rows.length) return res.status(404).type("text/plain").send("Parecer não encontrado");
     let saida = rows[0].saida;
     if (typeof saida === "string") { try { saida = JSON.parse(saida); } catch (_) {} }
-    const html = saida && saida._html;
+    let html = saida && saida._html;
     if (!html) return res.status(404).type("text/plain").send("HTML do parecer indisponível");
+
+    // Aprovado/liberado: remove a tarja RASCUNHO e o painel de revisão (interno),
+    // e carimba "PARECER LIBERADO" com a data. Funciona para qualquer parecer.
+    if (rows[0].status === "aprovado") {
+      let dataLib = "";
+      const ae = rows[0].aprovado_em;
+      if (ae) {
+        const d = new Date(ae);
+        if (!isNaN(d.getTime())) {
+          dataLib = String(d.getDate()).padStart(2, "0") + "/" +
+                    String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+        }
+      }
+      const stamp = '<div class="draft" style="background:#e8f5e9;border-color:#43a047;color:#1b5e20">' +
+        '<span class="dot" style="background:#43a047"></span><b>PARECER LIBERADO</b>&nbsp;— versão final aprovada' +
+        (dataLib ? (" em " + dataLib) : "") + ".</div>";
+      html = html
+        .replace(/<div class="draft">[\s\S]*?<\/div>/, stamp)
+        .replace(/<div class="review">[\s\S]*?<\/ul><\/div>/, "");
+    }
+
     res.set("Content-Type", "text/html; charset=utf-8");
     return res.send(html);
   } catch (e) {
