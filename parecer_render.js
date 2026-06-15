@@ -202,7 +202,7 @@ function s3(fatos){
       const c=statusChip(x.status), dt=brData(x.data_emissao);
       const obs=x.observacao?`<div style="font-size:11.5px;color:#9a6a16;margin-top:2px">${esc(x.observacao)}</div>`:"";
       const small=dt?`<small style="color:#5d6e89;font-weight:500"> · Emitida em ${dt}</small>`:"";
-      const link=x.url?`<a href="${esc(x.url)}" target="_blank">abrir →</a>`:"—";
+      const link=x.url?`<a href="${esc(x.url)}" target="_blank">abrir →</a>`:(x.url_download?`<a href="${esc(x.url_download)}" target="_blank">baixar no e-SAJ →</a>`:"—");
       return `<tr><td>${esc(x.item)}${obs}</td><td class="st ${c.cls}">${esc(c.txt)}${small}</td><td class="ab">${link}</td></tr>`;
     }).join("");
     blocos+=`<div class="inv-grp"><div class="inv-h">${esc(tit)}${esc(doc)} <span>${conc}/${rows.length} concluídas</span></div><table>${trs}</table></div>`;
