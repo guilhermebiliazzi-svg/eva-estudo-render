@@ -60,7 +60,11 @@ function montarPrompt({ tipo, titular, documento, candidatas, nome, dataAtual })
     "- 'UNIFICADA' (TRF/CJF) engloba cível e criminal -> trf_civel se estiver entre as candidatas.\n" +
     "- TJSP cível tem DOIS tipos: (a) tjsp_civel_1g (sistema EPROC, 1º grau) — contém 'Comarcas e Turmas Recursais', 'Primeiro Grau', '1º Grau' ou 'sistema eproc'; (b) tjsp_civeis (e-SAJ/SAJ SGC) — menciona 'SAJ' ou é certidão geral sem os marcadores de eproc.\n" +
     "- Diferença ortográfica pequena (LTDA vs EIRELI) NÃO é divergência. CENPROT normalmente não traz o nome do titular.\n" +
-    "- Pesquisa pela raiz do CNPJ quando o esperado tinha sufixo de filial NÃO é divergência.\n\n" +
+    "- Pesquisa pela raiz do CNPJ quando o esperado tinha sufixo de filial NÃO é divergência.\n" +
+    (Array.isArray(candidatas) && candidatas.length
+      ? "- Quando há candidatas acima: devolva em 'certidao_id' o id EXATO da candidata que corresponde a este arquivo. Se NENHUMA corresponder, certidao_id=null e divergencia=true.\n"
+      : "") +
+    "\n" +
     "==== CRITÉRIO DE RESULTADO ====\n" +
     "- negativa: a certidão diz NADA CONSTA / NÃO CONSTA / REGULAR / ATIVA / NEGATIVA / 'sem pendências' / 'sem débitos' / 'inexistência de débitos' / 'não constam débitos'. Disclaimers de escopo (ressalva no rodapé, validade de 30/90 dias, menção a CCM cancelado historicamente) NÃO alteram isso.\n" +
     "- positiva: a certidão EXPLICITAMENTE lista débitos, processos em curso, restrições, irregularidades ou pendências REAIS.\n" +
@@ -72,7 +76,7 @@ function montarPrompt({ tipo, titular, documento, candidatas, nome, dataAtual })
     "Na dúvida -> divergencia=false, resultado=negativa. Marcar como divergência algo que está correto é PIOR que o oposto neste contexto.\n\n" +
     "Datas: confie em " + dataAtual + " como hoje; datas de emissão iguais ou anteriores são válidas (nunca classifique como 'futuro suspeito').\n\n" +
     "RETORNE APENAS UM OBJETO JSON VÁLIDO, sem texto fora dele e sem cercas de código:\n" +
-    '{"tipo_detectado":"string","titular_detectado":"string ou null","documento_detectado":"string ou null","divergencia":true,"resultado":"negativa|positiva|com_pendencias","data_emissao":"YYYY-MM-DD ou null","numero_certidao":"string ou null","observacao":"até 300 caracteres"}'
+    '{"certidao_id":"id da candidata correspondente (string) ou null","tipo_detectado":"string","titular_detectado":"string ou null","documento_detectado":"string ou null","divergencia":true,"resultado":"negativa|positiva|com_pendencias","data_emissao":"YYYY-MM-DD ou null","numero_certidao":"string ou null","observacao":"até 300 caracteres"}'
   );
 }
 
@@ -106,7 +110,7 @@ async function auditarCertidao({ fileBase64, tipo, titular, documento, candidata
   } else {
     // Tipo desconhecido: não dá pra ler — sinaliza falha sem travar.
     return {
-      tipo_detectado: null, titular_detectado: null, documento_detectado: null,
+      certidao_id: null, tipo_detectado: null, titular_detectado: null, documento_detectado: null,
       divergencia: true, resultado: null, data_emissao: null, numero_certidao: null,
       observacao: "Leitor Claude: tipo de arquivo desconhecido (não é PDF nem HTML).",
       _fonte: "claude", _erro: "tipo_desconhecido",
@@ -138,7 +142,7 @@ async function auditarCertidao({ fileBase64, tipo, titular, documento, candidata
   try { parsed = extrairJSON(texto); }
   catch (e) {
     return {
-      tipo_detectado: null, titular_detectado: null, documento_detectado: null,
+      certidao_id: null, tipo_detectado: null, titular_detectado: null, documento_detectado: null,
       divergencia: true, resultado: null, data_emissao: null, numero_certidao: null,
       observacao: "Leitor Claude não devolveu JSON válido: " + String(texto || "").slice(0, 200),
       _fonte: "claude", _erro: "json_invalido",
@@ -147,6 +151,7 @@ async function auditarCertidao({ fileBase64, tipo, titular, documento, candidata
 
   // Normaliza para o formato esperado pelo WF-07 + marca a fonte.
   return {
+    certidao_id: parsed.certidao_id || null,
     tipo_detectado: parsed.tipo_detectado || null,
     titular_detectado: parsed.titular_detectado || null,
     documento_detectado: parsed.documento_detectado || null,
