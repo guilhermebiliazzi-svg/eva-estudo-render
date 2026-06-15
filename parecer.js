@@ -34,10 +34,34 @@ async function chamarClaude(fatos) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada no Render");
 
   const system = lerPrompt();
+
+  // Documentos PDF anexados (ex.: matrícula) — o modelo lê o conteúdo direto.
+  const docs = Array.isArray(fatos.documentos_pdf) ? fatos.documentos_pdf.filter(d => d && d.base64) : [];
+  // Não despeja o base64 no texto dos FATOS.
+  const fatosTexto = Object.assign({}, fatos);
+  delete fatosTexto.documentos_pdf;
+
+  const listaDocs = docs.length
+    ? "\n\nDOCUMENTOS ANEXADOS (leia o conteúdo destes PDFs): " +
+      docs.map(d => d.label || "documento").join("; ") + "."
+    : "";
+
   const userMsg =
-    "FATOS da diligência (JSON):\n" + JSON.stringify(fatos, null, 2) +
+    "FATOS da diligência (JSON):\n" + JSON.stringify(fatosTexto, null, 2) +
+    listaDocs +
     "\n\nGere o parecer e responda APENAS com o objeto JSON conforme o schema. " +
     "Sem texto fora do JSON e sem cercas de código.";
+
+  const content = [];
+  for (const d of docs) {
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: d.media_type || "application/pdf", data: d.base64 },
+      title: d.label || "documento",
+      citations: { enabled: false },
+    });
+  }
+  content.push({ type: "text", text: userMsg });
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -50,7 +74,7 @@ async function chamarClaude(fatos) {
       model: MODEL,
       max_tokens: 16000,
       system,
-      messages: [{ role: "user", content: userMsg }],
+      messages: [{ role: "user", content }],
     }),
   });
 
