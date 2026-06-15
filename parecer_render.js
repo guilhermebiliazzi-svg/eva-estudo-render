@@ -173,11 +173,11 @@ function s1(im){
 }
 function s2(r){
   if(!r) return "";
-  const chk=(neg,lbl,txtOk,txtNo)=>{const ok=!neg;return `<div class="chk"><div class="tick">${ok?"✓":"!"}</div><span><b>${lbl}.</b> ${ok?txtOk:txtNo}</span></div>`;};
+  const chk=(neg,lblOk,lblNo,txtOk,txtNo)=>{const ok=!neg;return `<div class="chk"><div class="tick">${ok?"✓":"!"}</div><span><b>${ok?lblOk:lblNo}.</b> ${ok?txtOk:txtNo}</span></div>`;};
   const checks=`<div class="checks">
-    ${chk(r.onus_reais,"Sem ônus reais","Não há hipoteca nem alienação fiduciária vigente sobre o imóvel.","Há hipoteca ou alienação fiduciária vigente sobre o imóvel.")}
-    ${chk(r.constricao,"Sem constrição","Não há penhora, arresto ou sequestro averbado.","Há penhora, arresto ou sequestro averbado.")}
-    ${chk(r.premonitoria,"Sem premonitória","Não há averbação do art. 828 do CPC vinculando ação ao bem.","Há averbação do art. 828 do CPC vinculando ação ao bem.")}
+    ${chk(r.onus_reais,"Sem ônus reais","Ônus real vigente","Não há hipoteca nem alienação fiduciária vigente sobre o imóvel.","Há hipoteca ou alienação fiduciária vigente sobre o imóvel.")}
+    ${chk(r.constricao,"Sem constrição","Constrição","Não há penhora, arresto ou sequestro averbado.","Há penhora, arresto ou sequestro averbado.")}
+    ${chk(r.premonitoria,"Sem premonitória","Premonitória","Não há averbação do art. 828 do CPC vinculando ação ao bem.","Há averbação do art. 828 do CPC vinculando ação ao bem.")}
   </div>`;
   const concl = r.desembaracado
     ? "Conclusão parcial: o imóvel está desembaraçado; nenhum apontamento do vendedor alcançou a matrícula."
@@ -233,7 +233,7 @@ function s4(s){
     <p class="concl-parcial">Veredito de solvência: ${s.solvente?"solvente":"não comprovada"}.${s.fonte?(" Fonte: "+esc(s.fonte)+"."):""}</p></section>`;
 }
 function s5(saida){
-  const ap=saida.apontamentos||[], fr=saida.fraude_execucao||{};
+  const ap=(saida.apontamentos||[]).filter(a=>a&&String(a.descricao||"").trim()), fr=saida.fraude_execucao||{};
   const linhas=ap.map(a=>{
     const ch=CHIPCLASSE[a.classe]||["","-"];
     const cls=ch[0]?(" "+ch[0]):"", txt=ch[1];
@@ -242,11 +242,20 @@ function s5(saida){
   }).join("");
   const tabela=ap.length?`<table><tr><th>Apontamento</th><th>Valor</th><th>Situação</th><th>Classe</th><th>Impeditivo</th></tr>${linhas}</table>`:"<p>Sem apontamentos relevantes.</p>";
   const intro = fr.analise?`<p>${esc(fr.nucleo?(fr.nucleo+" "):"")}${esc(fr.analise)}</p>`:"";
-  const sum = (fr.sumula_375||fr.boa_fe_adquirente)?`<p style="margin-top:14px"><b>Súmula 375/STJ e boa-fé.</b> ${esc(fr.sumula_375||"")} ${esc(fr.boa_fe_adquirente||"")}</p>`:"";
+  const txtSum = typeof fr.sumula_375 === "string" ? fr.sumula_375 : "";
+  const txtBoa = typeof fr.boa_fe_adquirente === "string" ? fr.boa_fe_adquirente : "";
+  let sumTexto = "";
+  if (txtSum || txtBoa) {
+    sumTexto = (esc(txtSum) + " " + esc(txtBoa)).trim();
+  } else if (fr.sumula_375 === true || fr.boa_fe_adquirente === true) {
+    sumTexto = (fr.boa_fe_adquirente === true ? "Há indícios de boa-fé do adquirente. " : "")
+      + (fr.sumula_375 === true ? "Pela Súmula 375/STJ, a fraude à execução pressupõe averbação da constrição na matrícula ou prova de má-fé do adquirente." : "");
+  }
+  const sum = sumTexto ? `<p style="margin-top:14px"><b>Súmula 375/STJ e boa-fé.</b> ${sumTexto}</p>` : "";
   return `<section><div class="snum"><div class="n">5</div><h2>Apontamentos e exame da fraude à execução</h2></div>${intro}${tabela}${sum}</section>`;
 }
 function s6(cs){
-  cs=cs||[];
+  cs=(cs||[]).filter(c=>c&&(String(c.titulo||"").trim()||String(c.descricao||"").trim()));
   const blocos = cs.length ? cs.map((c,i)=>{
     const tags=[]; if(c.prazo)tags.push(`<span class="tag"><b>Prazo:</b> ${esc(c.prazo)}</span>`); if(c.base_legal)tags.push(`<span class="tag"><b>Base:</b> ${esc(c.base_legal)}</span>`);
     return `<div class="cond"><div class="cn">${i+1}</div><div><h3>${esc(c.titulo)}</h3><p>${esc(c.descricao)}</p>${tags.length?`<div class="tags">${tags.join("")}</div>`:""}</div></div>`;

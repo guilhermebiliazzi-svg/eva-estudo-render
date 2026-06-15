@@ -58,4 +58,10 @@ A lista de `pendencias` é **FONTE ÚNICA DE VERDADE**: o mesmo conjunto aliment
 Onde o dado for ausente, ambíguo ou conflitante, emita item em `alertas` (`campo`, `descricao`, `severidade`: baixa|media|alta) em vez de adivinhar. Alertas de severidade `alta` devem rebaixar o veredito ou exigir modo preliminar.
 
 ## §7 SAÍDA
-Somente o objeto JSON conforme schema. pt-BR. Sem texto fora do JSON.
+Somente o objeto JSON conforme schema. pt-BR. Sem markdown, sem cercas de código, sem texto fora do JSON.
+
+**DISCIPLINA DE SAÍDA (obrigatória):**
+- **NUNCA** emita entradas vazias ou de preenchimento ("placeholder") em arrays. Cada item de `apontamentos`, `condicionantes`, `pendencias`, `objeto_e_pe` precisa ter conteúdo real (no mínimo `descricao`/`titulo` preenchidos). Se uma seção não tiver itens, devolva **array vazio `[]`** — jamais um item em branco.
+- `conclusao`: **sempre** preencha com um parágrafo substantivo (o veredito em prosa, condicionado às condicionantes). Nunca deixe vazio.
+- Use **somente** os apontamentos, certidões e dados presentes nos FATOS. Não acrescente itens que não estejam ali, não infira certidões ausentes, não preencha lacuna com texto genérico.
+- Só gere uma condicionante quando houver um achado concreto que a origine (§3.6). Sem achado, sem condicionante.
