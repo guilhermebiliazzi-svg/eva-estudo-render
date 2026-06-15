@@ -49,7 +49,10 @@ Pergunta central de todo parecer: **a aquisição é segura contra fraude à exe
 - Descompasso registral/estado civil: regime que exija outorga conjugal e/ou averbação (ex.: comunhão universal → bem comum → averbar casamento + outorga; art. 1.647 CC).
 - **Usufruto/nua-propriedade (da matrícula):** havendo usufruto vigente, condicionar a venda à participação do usufrutuário ou à extinção/averbação do usufruto antes do título.
 - Itens de diligência pendentes (ver §4): concluir antes do título definitivo.
-- Propter rem (IPTU/condomínio): quitar ou reter no preço.
+- **Propter rem (IPTU/condomínio) — ANCORE NO RESULTADO DA CERTIDÃO, nunca no texto genérico.** Antes de redigir, olhe o status/resultado da certidão correspondente no inventário (§3):
+  - **Negativa / sem débito** (certidão emitida ou anexada e negativa, OU certidão concluída sem que os FATOS tragam apontamento de débito propter rem para o imóvel): **afirme que a CND não acusa débito** e limite a condicionante a **reconfirmar a quitação na data da escritura** (a certidão é pontual e pode haver parcela vincenda). **NÃO** escreva "verificar inexistência de débito pendente" nem trate como pendência em aberto — isso contradiz a própria certidão anexada.
+  - **Positiva / com débito:** quitar ou reter o valor no preço, quantificando o débito quando possível.
+  - **Não emitida / pendente:** condicionante de **obter a CND** e confirmar a quitação antes do título definitivo.
 - Apontamentos pessoais: dar ciência, nomeando a parte e a esfera.
 
 **3.7 VEREDITO GRADUADO** — `SEGURA` | `SEGURA_COM_CONDICIONANTES` | `RISCO` | `INVIAVEL`. O veredito é condicionado: "segura, observadas as condicionantes".
