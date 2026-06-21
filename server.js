@@ -107,62 +107,77 @@ app.post("/ccv", async (req, res) => {
   }
 });
 // ===================================================================
-// TEMP — Smoke test do motor de CCV (cenário: financiamento + FGTS + sinal)
-// Cole este bloco no server.js LOGO DEPOIS da rota app.post("/ccv", ...).
-// Abra https://eva-estudo-render.onrender.com/ccv-teste no navegador.
-// Pode REMOVER depois do teste. Não grava nem envia nada — só gera e mostra.
+// TEMP — Smoke test do motor de CCV com DADOS REAIS da diligência Grumixamas.
+// Vendedor: Marcos (divorciado/comunhão parcial, ressalva de partilha).
+// Comprador: Adecarlos (solteiro, sem cônjuge).
+// Pagamento: sinal 20k + recursos próprios 100k + FGTS 54k + financiamento 106k = 280k.
+// Pendências: as 5 reais do certidoes_status.
+// Campos não informados ficam como [a completar] (NÃO inventar).
+// Cole no server.js no lugar da rota /ccv-teste anterior. Remover após o teste.
 // ===================================================================
 app.get("/ccv-teste", async (req, res) => {
   const fatos = {
     imovel: {
-      endereco: "Rua das Grumixamas, nº 530, apartamento nº 1304, Torre B, bairro Jabaquara, São Paulo/SP",
-      cep: "04321-000",
+      endereco: "Rua das Grumixamas, nº 530, apartamento nº 1304, Vila Parque Jabaquara, São Paulo/SP",
+      cep: "[a completar]",
       matricula: "226.651",
       ri_numero: "8º",
       cns: "[a completar]",
       contribuinte: "[a completar]",
-      descricao_registral: "Apartamento nº 1304, no 13º pavimento da Torre B do Condomínio Aplauso Jabaquara, área privativa de 64,000 m², área comum de 41,000 m² (incluída 1 vaga de garagem indeterminada), área total de 105,000 m², fração ideal de 0,8234% no terreno e demais partes comuns, situado na Rua das Grumixamas nº 530, 28º Subdistrito - Jabaquara."
+      descricao_registral: "[a completar] (transcrever a descrição completa da matrícula nº 226.651 do 8º RI/SP)"
     },
-    preco: 850000,
+    preco: 280000,
     vendedor: {
-      nome: "Marcos Docampo Ferrari", nacionalidade: "brasileiro", profissao: "engenheiro",
-      rg: "[a completar]", rg_orgao: "[a completar]", cpf: "279.074.448-37",
-      email: "[a completar]", endereco: "[a completar]",
-      estado_civil: "divorciado", regime_bens: "comunhao_parcial", data_casamento: "06/09/2003",
-      obs: "Divorciado por escritura de divórcio consensual com partilha lavrada em 28/04/2025 perante o 4º Tabelião de São Bernardo do Campo."
+      nome: "Marcos Docampo Ferrari",
+      nacionalidade: "brasileiro",
+      profissao: "[a completar]",
+      rg: "[a completar]",
+      rg_orgao: "[a completar]",
+      cpf: "279.074.448-37",
+      email: "[a completar]",
+      endereco: "[a completar]",
+      estado_civil: "divorciado",
+      regime_bens: "comunhao_parcial",
+      data_casamento: "06/09/2003",
+      obs: "Divorciado por escritura de divórcio consensual com partilha lavrada em 28/04/2025 perante o 4º Tabelião de Notas de São Bernardo do Campo. A titularidade integral depende de o imóvel ter cabido ao vendedor na partilha (verificar)."
     },
     comprador: {
-      nome: "Ana Carolina Souza Lima", nacionalidade: "brasileira", profissao: "médica",
-      rg: "32.456.789-0", rg_orgao: "SSP/SP", cpf: "345.678.912-00",
-      email: "ana.lima@exemplo.com",
-      endereco: "Rua Joaquim Floriano, nº 100, apto 52, Itaim Bibi, São Paulo/SP, CEP 04534-010",
-      estado_civil: "casada", regime_bens: "comunhao_parcial", data_casamento: "12/05/2018",
-      conjuge: { nome: "Rafael Augusto Pereira", nacionalidade: "brasileiro", profissao: "advogado", rg: "28.123.456-7", rg_orgao: "SSP/SP", cpf: "298.765.432-11" }
+      nome: "Adecarlos Evangelista dos Santos Junior",
+      nacionalidade: "brasileiro",
+      profissao: "Analista de Qualidade",
+      rg: "37.184.064-8",
+      rg_orgao: "[a completar]",
+      cpf: "396.623.268-55",
+      email: "adecarlos.evangelista@gmail.com",
+      endereco: "Rua Duarte de Brito, nº 129, Vila Capela, São Paulo/SP, CEP [a completar]",
+      estado_civil: "solteiro"
     },
     pagamento: {
       tem_sinal: true,
       parcelas: [
-        { tipo: "sinal", rotulo: "sinal e princípio de pagamento", valor: 50000, momento: "neste ato, por transferência bancária" },
-        { tipo: "fgts", rotulo: "recursos do FGTS da parte compradora", valor: 80000, momento: "mediante liberação pela Caixa Econômica Federal" },
-        { tipo: "financiamento", rotulo: "financiamento bancário com garantia de alienação fiduciária", valor: 720000, momento: "mediante liberação pelo agente financeiro" }
+        { tipo: "sinal", rotulo: "sinal e princípio de pagamento", valor: 20000, momento: "neste ato, na assinatura deste compromisso, por transferência bancária" },
+        { tipo: "recursos_proprios", rotulo: "recursos próprios da parte compradora", valor: 100000, momento: "na data da assinatura do instrumento definitivo" },
+        { tipo: "fgts", rotulo: "recursos do FGTS da parte compradora", valor: 54000, momento: "mediante liberação pela Caixa Econômica Federal" },
+        { tipo: "financiamento", rotulo: "financiamento bancário com garantia de alienação fiduciária", valor: 106000, momento: "mediante liberação pelo agente financeiro" }
       ],
-      conta_vendedora: { banco: "Banco Itaú Unibanco (341)", agencia: "1234", conta: "56789-0" }
+      conta_vendedora: { banco: "[a completar]", agencia: "[a completar]", conta: "[a completar]" }
     },
     comissao: {
-      total: 51000, percentual: 6,
-      condicao_pagamento: "devida e exigível na assinatura deste instrumento, mediante cobrança bancária única emitida pela intermediadora",
-      split: [
-        { credor: "Ville Jardins Negócios Imobiliários Ltda (RE/MAX Ville)", documento: "41.132.782/0001-08", creci: "CRECI J 37.196", valor: 30600 },
-        { credor: "João Pedro Almeida", documento: "123.456.789-00", creci: "CRECI-SP 123.456-F", valor: 20400 }
-      ]
+      total: null,
+      percentual: null,
+      condicao_pagamento: "[a completar]",
+      split: []
     },
     certidoes_pendentes: [
-      "Certidão de distribuição de ações e execuções cíveis estaduais (1º grau) - em obtenção",
-      "Certidão negativa de protesto - 2º ao 5º Tabelionatos da Capital - em obtenção"
+      "Ata de assembleia / instrumento de nomeação do síndico",
+      "Certidão simplificada da JUCESP (vendedor)",
+      "Certidão negativa de débitos condominiais (declaração do condomínio)",
+      "Comprovante de residência do vendedor",
+      "Dados cadastrais do imóvel (Prefeitura de São Paulo)"
     ],
-    prazo_pendentes: 15,
-    prazos: { lavratura_dias: 60, apresentacao_certidoes_dias: 15 },
-    data: "São Paulo, 21 de junho de 2026.",
+    prazo_pendentes: null,
+    prazos: { lavratura_dias: null },
+    data: "[a completar]",
     testemunhas: []
   };
 
@@ -188,7 +203,6 @@ app.get("/ccv-teste", async (req, res) => {
     res.status(500).type("text/plain; charset=utf-8").send("ERRO /ccv-teste: " + String((e && e.message) || e));
   }
 });
-
 app.post("/estudo", async (req, res) => {
   const body = req.body || {};
   const out = path.join(os.tmpdir(), `estudo_${Date.now()}.pptx`);
