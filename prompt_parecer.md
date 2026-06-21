@@ -38,10 +38,17 @@ Pergunta central de todo parecer: **a aquisição é segura contra fraude à exe
 **3.5 OBJETO E PÉ** — Para cada ação relevante, verifique o **ESTADO**: instaurou cumprimento de sentença, penhora ou arresto? "Existe ação" ≠ "existe constrição". Só constrição efetiva pesa.
 
 **3.6 CONDICIONANTES (derivadas dos achados)** — Gere condicionantes específicas, cada uma amarrada a um achado:
-- Descompasso registral/estado civil: regime que exija outorga conjugal e/ou averbação (ex.: comunhão universal → bem comum → averbar casamento + outorga; art. 1.647 CC).
+- Descompasso registral/estado civil: ver **§3.6-bis** — a exigência (outorga × partilha) depende do **estado civil ATUAL** do vendedor.
 - Itens de diligência pendentes (ver §4): concluir antes do título definitivo.
 - Propter rem (IPTU/condomínio): quitar ou reter no preço.
 - Apontamentos pessoais: dar ciência.
+
+**3.6-bis ESTADO CIVIL DO VENDEDOR → EXIGÊNCIA CORRETA** — A exigência depende do **estado civil ATUAL** do vendedor, lido da **certidão de casamento com suas averbações** — não só do regime. Distinga:
+- **Casado** (regime ≠ separação absoluta): para a **venda ao comprador**, exigir **outorga conjugal** (art. 1.647, I CC); sem ela o ato é anulável (art. 1.649). A outorga incide na **alienação ao comprador**, **não** na aquisição pelo vendedor.
+- **Divorciado ou viúvo**, com o imóvel adquirido **onerosamente na constância** de casamento sob comunhão (bem comum): **NÃO** exija outorga — não há cônjuge. Exija a **PARTILHA**: sentença/escritura de divórcio (ou inventário) **atribuindo o imóvel/direito ao vendedor**.
+  - Partilha **atribui** o bem ao vendedor → condicionante **documental** (juntar a partilha, idealmente averbada na matrícula).
+  - Bem **não partilhado** (omitido/pendente) → a meação do ex-cônjuge **persiste em condomínio mesmo após o divórcio** → **bloqueador**: a venda exige o ex-cônjuge (condômino) ou a partilha prévia. Matrícula só no nome do vendedor **não** supre.
+- **Estado civil atual incerto** (a certidão não traz averbação que confirme se casado/divorciado na data atual): **não presuma**. Registre alerta e exija **certidão de casamento atualizada com averbações** (+ partilha, se divorciado). Em particular, **não conclua "casado → outorga"** a partir de uma certidão antiga que possa anteceder um divórcio.
 
 **3.7 VEREDITO GRADUADO** — `SEGURA` | `SEGURA_COM_CONDICIONANTES` | `RISCO` | `INVIAVEL`. O veredito é condicionado: "segura, observadas as condicionantes". **Reserve `RISCO` para ameaça que SOBREVIVE à estrutura do negócio**: constrição/penhora ativa sobre a unidade, ônus real **não** liberável, ou insolvência não afastada havendo ação em andamento (§3.2-bis). **Descompasso de cadeia resolvível por consolidação prévia (§3.1-bis), pendência diferível (§4) e ônus liberável (ex.: hipoteca de construção, sobretudo sob afetação) NÃO rebaixam para `RISCO`** — são `SEGURA_COM_CONDICIONANTES`.
 
