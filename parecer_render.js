@@ -151,10 +151,14 @@ function statusChip(st){
 const BADGE={SEGURA:"AQUISIÇÃO SEGURA",SEGURA_COM_CONDICIONANTES:"AQUISIÇÃO SEGURA · COM CONDICIONANTES",RISCO:"AQUISIÇÃO COM RISCO",INVIAVEL:"AQUISIÇÃO INVIÁVEL"};
 const CHIPCLASSE={pessoal:["pessoal","pessoal"],propter_rem:["propter","propter rem"],real:["","real"]};
 
-function head(saida){
+function head(saida, fatos){
   const data = saida.data_parecer ? brData(saida.data_parecer) : "";
-  return `<div class="lh"><img src="${LOGO}" alt="RE/MAX Ville — CRECI J 37.196" style="height:56px;width:auto;display:block">
-    <div class="meta"><div><b>Parecer de diligência</b></div><div>São Paulo${data?(" · "+esc(data)):""}</div><div>Ref.: ${esc(saida.ref||"")}</div></div></div>`;
+  const im = (fatos && fatos.imovel) || {};
+  const ref = saida.ref
+    || (im.matricula ? ("Matrícula " + im.matricula + (im.ri ? " — " + im.ri : "")) : "")
+    || im.descricao || "";
+  return `<div class="lh"><img src="${LOGO}" alt="RE/MAX Ville — CRECI J 37.196" style="height:88px;width:auto;display:block">
+    <div class="meta"><div><b>Parecer de diligência</b></div><div>São Paulo${data?(" · "+esc(data)):""}</div>${ref?`<div>Ref.: ${esc(ref)}</div>`:""}</div></div>`;
 }
 function review(saida){
   const it=[];
@@ -264,8 +268,17 @@ function s6(cs){
   return `<section><div class="snum"><div class="n">6</div><h2>Condicionantes para a segurança da compra</h2></div>${blocos}</section>`;
 }
 function s7(saida){
-  const pil=(saida.pilares||[]).map(p=>`<li><span class="p">▪</span><span>${esc(p)}</span></li>`).join("");
-  return `<section><div class="snum"><div class="n">7</div><h2>Conclusão</h2></div><p>${esc(saida.conclusao||"")}</p>${pil?`<ul class="pillars">${pil}</ul>`:""}</section>`;
+  const c = saida.conclusao;
+  const conclusaoTxt = typeof c === "string" ? c
+    : (c && typeof c === "object"
+        ? (c.texto || c.conclusao || c.parecer || c.resumo || c.veredito_fundamentado
+           || Object.values(c).filter(v => typeof v === "string").join(" "))
+        : "");
+  const pil=(saida.pilares||[]).map(p=>{
+    const t = typeof p === "string" ? p : (p && (p.texto || p.titulo || p.descricao)) || "";
+    return `<li><span class="p">▪</span><span>${esc(t)}</span></li>`;
+  }).join("");
+  return `<section><div class="snum"><div class="n">7</div><h2>Conclusão</h2></div><p>${esc(conclusaoTxt||"")}</p>${pil?`<ul class="pillars">${pil}</ul>`:""}</section>`;
 }
 
 function renderParecerHTML(saida, fatos){
@@ -275,7 +288,7 @@ function renderParecerHTML(saida, fatos){
   const draft = rascunho?`<div class="draft"><span class="dot"></span><b>RASCUNHO</b>&nbsp;— gerado automaticamente, aguarda sua revisão e liberação. Não é documento final até a aprovação.</div>`:"";
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${CSS}</style></head><body>
 <div class="sheet">
-  ${head(saida)}
+  ${head(saida, fatos)}
   ${draft}
   ${rascunho?review(saida):""}
   <div class="pad">
