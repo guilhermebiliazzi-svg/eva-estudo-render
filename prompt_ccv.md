@@ -25,7 +25,7 @@ Declarando, expressamente, não manterem relações de união estável com terce
 
 **1. Do Objeto**
 
-A PARTE VENDEDORA declara-se proprietária e possuidora do imóvel situado na {endereço completo do imóvel com CEP}, registrado sob a matrícula nº {matrícula} do {Nº} Oficial de Registro de Imóveis da Comarca de São Paulo (CNS {cns}), Contribuinte nº {contribuinte} junto à Prefeitura local, assim descrito em sua matrícula: {descrição registral completa — unidade, andar, bloco, edifício, esquina, subdistrito, área útil, área comum, vagas, área total, fração ideal}.
+A PARTE VENDEDORA declara-se proprietária e possuidora do imóvel situado na {endereço completo do imóvel com CEP}, registrado sob a matrícula nº {matrícula} do {Nº} Oficial de Registro de Imóveis da Comarca de São Paulo, Contribuinte nº {contribuinte} junto à Prefeitura local, assim descrito em sua matrícula: {descrição registral completa — unidade, andar, bloco, edifício, esquina, subdistrito, área útil, área comum, vagas, área total, fração ideal}.
 
 **1.1. **{cláusula de outorga conjugal — ver §4.3}
 
