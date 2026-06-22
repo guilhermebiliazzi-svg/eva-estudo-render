@@ -5,6 +5,8 @@
  * apenas envolve as palavras exatas produzidas pelo motor em marcação HTML.
  */
 
+const { LOGO } = require('./parecer_render'); // mesma logo RE/MAX Ville do parecer
+
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -97,7 +99,7 @@ function renderCcvHTML(saida, fatos) {
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>${CSS}</style></head><body>
 <div class="sheet">
   <div class="lh">
-    <div class="mark">VILLE JARDINS<span>NEGÓCIOS IMOBILIÁRIOS</span></div>
+    <img src="${LOGO}" alt="RE/MAX Ville — CRECI J 37.196" style="height:72px;width:auto;display:block">
     <div class="meta"><b>Compromisso de Compra e Venda</b><br>${esc(endereco)}</div>
   </div>
   ${draft}
