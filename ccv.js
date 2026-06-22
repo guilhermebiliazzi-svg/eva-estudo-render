@@ -34,10 +34,37 @@ async function chamarClaude(fatos) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada no Render");
 
   const system = lerPrompt();
+
+  // Documentos PDF anexados (ex.: matrícula) — o modelo lê o conteúdo direto,
+  // igual ao parecer.js. Não despejamos o base64 no texto dos FATOS.
+  const docs = Array.isArray(fatos.documentos_pdf) ? fatos.documentos_pdf.filter(d => d && d.base64) : [];
+  const fatosTexto = Object.assign({}, fatos);
+  delete fatosTexto.documentos_pdf;
+
+  const listaDocs = docs.length
+    ? "\n\nDOCUMENTOS ANEXADOS (leia o conteúdo destes PDFs e use-os como fonte). " +
+      "Se houver matrícula entre eles, transcreva dela a descrição registral completa do imóvel no Item 1 " +
+      "(unidade, andar, bloco, edifício, subdistrito, áreas e fração ideal) e, se constarem, o CNS do RI, " +
+      "o número de contribuinte e o CEP — substituindo os respectivos [a completar]. Documentos: " +
+      docs.map(d => d.label || "documento").join("; ") + "."
+    : "";
+
   const userMsg =
-    "FATOS da transação (JSON):\n" + JSON.stringify(fatos, null, 2) +
+    "FATOS da transação (JSON):\n" + JSON.stringify(fatosTexto, null, 2) +
+    listaDocs +
     "\n\nRedija o CCV completo e responda APENAS com o objeto JSON conforme o schema do §7. " +
     "Sem texto fora do JSON e sem cercas de código.";
+
+  const content = [];
+  for (const d of docs) {
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: d.media_type || "application/pdf", data: d.base64 },
+      title: d.label || "documento",
+      citations: { enabled: false },
+    });
+  }
+  content.push({ type: "text", text: userMsg });
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -50,7 +77,7 @@ async function chamarClaude(fatos) {
       model: MODEL,
       max_tokens: 16000,
       system,
-      messages: [{ role: "user", content: userMsg }],
+      messages: [{ role: "user", content }],
     }),
   });
 
