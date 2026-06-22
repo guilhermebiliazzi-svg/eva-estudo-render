@@ -11,6 +11,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { renderCcvHTML } = require("./ccv_render");
 
 const MODEL = process.env.CCV_MODEL || "claude-opus-4-8";
 const PROMPT_PATH = process.env.PROMPT_CCV || path.join(__dirname, "prompt_ccv.md");
@@ -139,6 +140,7 @@ async function gerarCCV(fatos) {
   if (!fatos || typeof fatos !== "object") throw new Error("FATOS ausentes ou inválidos");
   const saida = await chamarClaude(fatos);
   saida._validacao = validar(saida);
+  try { saida._html = renderCcvHTML(saida, fatos); } catch (e) { saida._html_erro = String(e && e.message || e); }
   return saida;
 }
 
