@@ -307,4 +307,4 @@ function renderParecerHTML(saida, fatos){
   </div>
 </div></body></html>`;
 }
-module.exports = { renderParecerHTML };
+module.exports = { renderParecerHTML, LOGO };
