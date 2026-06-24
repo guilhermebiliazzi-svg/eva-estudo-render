@@ -10,7 +10,6 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { renderParecerHTML } = require("./parecer_render");
 
 const MODEL = process.env.PARECER_MODEL || "claude-opus-4-8";
 const PROMPT_PATH = process.env.PROMPT_PARECER || path.join(__dirname, "prompt_parecer.md");
@@ -34,34 +33,10 @@ async function chamarClaude(fatos) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada no Render");
 
   const system = lerPrompt();
-
-  // Documentos PDF anexados (ex.: matrícula) — o modelo lê o conteúdo direto.
-  const docs = Array.isArray(fatos.documentos_pdf) ? fatos.documentos_pdf.filter(d => d && d.base64) : [];
-  // Não despeja o base64 no texto dos FATOS.
-  const fatosTexto = Object.assign({}, fatos);
-  delete fatosTexto.documentos_pdf;
-
-  const listaDocs = docs.length
-    ? "\n\nDOCUMENTOS ANEXADOS (leia o conteúdo destes PDFs): " +
-      docs.map(d => d.label || "documento").join("; ") + "."
-    : "";
-
   const userMsg =
-    "FATOS da diligência (JSON):\n" + JSON.stringify(fatosTexto, null, 2) +
-    listaDocs +
+    "FATOS da diligência (JSON):\n" + JSON.stringify(fatos, null, 2) +
     "\n\nGere o parecer e responda APENAS com o objeto JSON conforme o schema. " +
     "Sem texto fora do JSON e sem cercas de código.";
-
-  const content = [];
-  for (const d of docs) {
-    content.push({
-      type: "document",
-      source: { type: "base64", media_type: d.media_type || "application/pdf", data: d.base64 },
-      title: d.label || "documento",
-      citations: { enabled: false },
-    });
-  }
-  content.push({ type: "text", text: userMsg });
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -73,8 +48,9 @@ async function chamarClaude(fatos) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 16000,
+      temperature: 0,
       system,
-      messages: [{ role: "user", content }],
+      messages: [{ role: "user", content: userMsg }],
     }),
   });
 
@@ -131,11 +107,70 @@ function validar(saida) {
   return { ok: alertas.length === 0, alertas };
 }
 
+/**
+ * Coerência §5→§6 (DETERMINÍSTICA, em código — não confiamos no humor do modelo):
+ * toda pendência apontada (apontamento com situação pendente) e todo item do
+ * inventário não concluído viram condicionante. Se já houver condicionante que
+ * cobre o item, não duplica. Resultado: §6 NUNCA fica vazio havendo pendência.
+ */
+const _PEND = /(pendente|n[aã]o\s+verificad|aguardando|sem\s+resultado|n[aã]o\s+emitid|em\s+aberto|n[aã]o\s+obtid|n[aã]o\s+lid|n[aã]o\s+conclu|erro\s+na\s+consulta)/i;
+
+function _textoDe(x) {
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  return [x.item, x.apontamento, x.descricao, x.situacao, x.situacao_certidao,
+          x.label, x.titulo, x.texto, x.tipo, x.titular].filter(Boolean).join(" ");
+}
+
+function garantirCondicionantes(saida, fatos) {
+  if (!saida || typeof saida !== "object") return;
+  if (!Array.isArray(saida.condicionantes)) saida.condicionantes = [];
+
+  const chaves = (txt) => (String(txt).toLowerCase().match(/[a-zà-ú]{4,}/gi) || []);
+  const jaCobre = (txt) => {
+    const ch = chaves(txt);
+    if (!ch.length) return false;
+    return saida.condicionantes.some(c => {
+      const ct = _textoDe(c).toLowerCase();
+      return ch.filter(k => ct.includes(k)).length >= Math.min(2, ch.length);
+    });
+  };
+  const add = (desc, fonte) => {
+    if (!desc) return;
+    saida.condicionantes.push({
+      item: desc,
+      prazo: "antes do título definitivo",
+      fonte: fonte || "coerência automática: pendência sem condicionante"
+    });
+  };
+
+  // (a) apontamentos com situação pendente
+  (Array.isArray(saida.apontamentos) ? saida.apontamentos : []).forEach(ap => {
+    const t = _textoDe(ap);
+    if (_PEND.test(t) && !jaCobre(t)) {
+      const nome = (ap && (ap.item || ap.apontamento || ap.descricao)) || t;
+      add("Concluir/obter: " + nome, ap && (ap.fonte || ap.fonte_certidao || ap.referencia));
+    }
+  });
+
+  // (b) itens do inventário de certidões ainda não concluídos
+  const inv = (fatos && Array.isArray(fatos.inventario_certidoes)) ? fatos.inventario_certidoes : [];
+  inv.forEach(it => {
+    const st = String((it && it.status) || "").toLowerCase();
+    if (st === "concluido" || st === "concluído" || st === "validado") return;
+    const nome = (it && (it.item || it.tipo)) || "certidão";
+    const tit = it && it.titular ? (" — " + it.titular) : "";
+    if (!jaCobre(nome + " " + ((it && it.titular) || ""))) {
+      add("Concluir/obter " + nome + tit, "inventário (status: " + ((it && it.status) || "pendente") + ")");
+    }
+  });
+}
+
 async function gerarParecer(fatos) {
   if (!fatos || typeof fatos !== "object") throw new Error("FATOS ausentes ou inválidos");
   const saida = await chamarClaude(fatos);
+  garantirCondicionantes(saida, fatos);   // <-- trava determinística: §6 espelha as pendências
   saida._validacao = validar(saida);
-  try { saida._html = renderParecerHTML(saida, fatos); } catch (e) { saida._html_erro = String(e && e.message || e); }
   return saida;
 }
 
