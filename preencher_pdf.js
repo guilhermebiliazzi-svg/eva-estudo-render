@@ -74,6 +74,12 @@ module.exports = function (app) {
       const helv = await doc.embedFont(StandardFonts.Helvetica);
       form.updateFieldAppearances(helv);
 
+      // ACHATA o formulário: "queima" os valores como conteúdo fixo da página.
+      // Sem isso, visualizadores simples (WhatsApp/celular) mostram os campos
+      // em branco. Depois de achatar, o texto aparece em qualquer leitor e o
+      // documento não pode mais ser editado nos campos.
+      try { form.flatten(); } catch (e) { console.error('flatten falhou (segue):', e.message); }
+
       const out = await doc.save();
       const outB64 = Buffer.from(out).toString("base64");
 
