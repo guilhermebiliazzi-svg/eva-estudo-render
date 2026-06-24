@@ -44,7 +44,7 @@ Pergunta central de todo parecer: **a aquisição é segura contra fraude à exe
 **3.6 CONDICIONANTES (derivadas dos achados)** — Gere condicionantes específicas, cada uma amarrada a um achado:
 - Descompasso registral/estado civil: regime que exija outorga conjugal e/ou averbação (ex.: comunhão universal → bem comum → averbar casamento + outorga; art. 1.647 CC).
 - Itens de diligência pendentes (ver §4): concluir antes do título definitivo.
-- Propter rem (IPTU/condomínio): quitar ou reter no preço.
+- Propter rem (IPTU/condomínio): gere a condicionante **apenas** quando houver débito efetivo OU quando a CND municipal (IPTU) / a declaração de quitação condominial estiver **ausente ou pendente** no inventário. Se a **CND municipal (IPTU) voltou negativa/concluída**, **NÃO** gere condicionante de IPTU — declare os tributos imobiliários regulares. Idem para condomínio: só condicione se a quitação condominial estiver pendente ou acusar débito. Não levante saldo "eventual" quando a certidão correspondente já veio limpa.
 - Apontamentos pessoais: dar ciência.
 
 **3.6-bis NATUREZA DO BEM PELA QUALIFICAÇÃO NO ATO DE AQUISIÇÃO (não invente partilha de cônjuge falecido).** Antes de gerar qualquer condicionante de estado civil/sucessão, leia **como o titular foi qualificado no próprio ato (R.) que lhe transmitiu o bem** na matrícula. Se ali ele consta **solteiro(a), viúvo(a) ou divorciado(a)**, o imóvel é **bem particular**: cônjuge falecido **antes** dessa aquisição, e respectivo espólio/herdeiros, **NÃO** alcançam a unidade — é **proibido** gerar condicionante de inventário/partilha de cônjuge falecido (arts. 1.829/1.991 CC) sobre bem assim adquirido. Só há análise de meação/partilha quando o bem foi adquirido **na constância do casamento** (qualificado como casado no ato). A única verificação que remanesce sobre bem particular é o **estado civil ATUAL** do vendedor, e seu efeito é **um só**: se ele estiver **hoje** casado em regime distinto da separação absoluta, exigir **outorga conjugal na venda** (art. 1.647, I CC). Não duplique isso: fundir na condicionante de outorga, sem reabrir hipótese de partilha já afastada pela matrícula.
@@ -71,3 +71,7 @@ Onde o dado for ausente, ambíguo ou conflitante, emita item em `alertas` (`camp
 
 ## §7 SAÍDA
 Somente o objeto JSON conforme schema. pt-BR. Sem texto fora do JSON.
+
+**Campos obrigatórios da conclusão — NUNCA omita nem deixe vazios:**
+- `veredito`: exatamente um de `SEGURA` | `SEGURA_COM_CONDICIONANTES` | `RISCO` | `INVIAVEL` (§3.7).
+- `conclusao`: **string** (não objeto) — o parágrafo de fechamento da Seção 7, em prosa corrida, sintetizando os pilares (situação registral; solvência/fraude à execução quando aplicável; e as condicionantes que tornam a compra segura). Este campo alimenta diretamente a Seção 7 do documento renderizado; se vier vazio, a conclusão some. Sempre preencha.
