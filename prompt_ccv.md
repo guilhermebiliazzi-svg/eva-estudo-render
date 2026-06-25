@@ -17,9 +17,9 @@ O documento abaixo é o padrão "Rebouças". Use-o como gabarito de estrutura, e
 
 **Das Partes**
 
-De um lado, na qualidade de promitente vendedor, doravante denominado PARTE VENDEDORA: {qualificação completa do vendedor — nome, nacionalidade, profissão, RG nº + órgão, CPF, e-mail, endereço completo com CEP, estado civil + data do casamento + regime de bens, e cônjuge com nome, nacionalidade, profissão e CPF; se separação de bens por pacto, citar tabelião, data, livro, páginas e registro};
+De um lado, na qualidade de promitente vendedor, doravante denominado PARTE VENDEDORA: {reproduza AQUI, VERBATIM, o texto de `fatos.qualificacao_vendedor` — não altere nenhuma palavra, ordem ou pontuação; ele já traz nome, qualificação, estado civil (com regime apenas se casado), cônjuge quando houver e endereço};
 
-E de outro, na qualidade de promissária compradora, doravante denominada PARTE COMPRADORA: {qualificação completa do comprador, nos mesmos moldes, incluindo o cônjuge}.
+E de outro, na qualidade de promissária compradora, doravante denominada PARTE COMPRADORA: {reproduza AQUI, VERBATIM, o texto de `fatos.qualificacao_comprador` — não altere nenhuma palavra, ordem ou pontuação}.
 
 Declarando, expressamente, não manterem relações de união estável com terceiros não nominados, nos termos do art. 1.723 do Código Civil e sob suas responsabilidades civil e criminal.
 
