@@ -36,7 +36,7 @@ function identidade(p) {
   const segs = [nomeBold(p.nome)];
   if (p.nacionalidade) segs.push(p.nacionalidade);
   if (p.profissao) segs.push(p.profissao);
-  if (p.rg) segs.push(W(g, 'portador', 'portadora') + ' do RG nº ' + p.rg + (p.rg_orgao ? (' — ' + p.rg_orgao) : ' [a completar: órgão expedidor]'));
+  if (p.rg) segs.push(W(g, 'portador', 'portadora') + ' do RG nº ' + p.rg + (p.rg_orgao ? (' — ' + p.rg_orgao) : ''));
   if (p.cpf) segs.push(W(g, 'inscrito', 'inscrita') + ' no CPF sob o nº ' + p.cpf);
   if (p.email) segs.push('e-mail ' + p.email);
   return segs.join(', ');
