@@ -153,16 +153,31 @@ function garantirCondicionantes(saida, fatos) {
     }
   });
 
-  // (b) itens do inventário de certidões ainda não concluídos
+  // (b) itens do inventário de certidões — por status (whitelist explícita).
+  // SÓ os status abaixo geram condicionante. concluido, cancelada e qualquer
+  // status não listado NÃO geram nada — evita falso-positivo silencioso.
+  const STATUS_OBTER = new Set([
+    "pendente", "aguardando_email", "aguardando_match",
+    "em_processamento", "erro_infosimples"
+  ]);
+  const STATUS_SANEAR = new Set(["com_pendencias"]);
+
   const inv = (fatos && Array.isArray(fatos.inventario_certidoes)) ? fatos.inventario_certidoes : [];
   inv.forEach(it => {
     const st = String((it && it.status) || "").toLowerCase();
-    if (st === "concluido" || st === "concluído" || st === "validado") return;
     const nome = (it && (it.item || it.tipo)) || "certidão";
     const tit = it && it.titular ? (" — " + it.titular) : "";
-    if (!jaCobre(nome + " " + ((it && it.titular) || ""))) {
-      add("Concluir/obter " + nome + tit, "inventário (status: " + ((it && it.status) || "pendente") + ")");
+    const chaveDedup = nome + " " + ((it && it.titular) || "");
+
+    if (STATUS_OBTER.has(st)) {
+      if (!jaCobre(chaveDedup))
+        add("Concluir/obter " + nome + tit, "inventário (status: " + (it.status || "pendente") + ")");
+    } else if (STATUS_SANEAR.has(st)) {
+      if (!jaCobre(chaveDedup))
+        add("Verificar e sanear a pendência apontada em " + nome + tit,
+            "inventário (status: " + (it.status || "com_pendencias") + ")");
     }
+    // concluido, cancelada e status desconhecido: não gera condicionante.
   });
 }
 
