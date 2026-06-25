@@ -16,6 +16,86 @@ const { renderCcvHTML } = require("./ccv_render");
 const MODEL = process.env.CCV_MODEL || "claude-opus-4-8";
 const PROMPT_PATH = process.env.PROMPT_CCV || path.join(__dirname, "prompt_ccv.md");
 
+// ===== Qualificação determinística das partes (estado civil antes do endereço;
+// regime só se casado; cônjuge anuente; casal co-titular) =====
+// Montador determinístico da qualificação das partes (CCV).
+// Entrada: lista de titulares (cada um no formato qualifPF da Montagem):
+//   { nome, nacionalidade, profissao, rg, rg_orgao, cpf, email, endereco,
+//     estado_civil, regime_bens, conjuge?{nome,nacionalidade,profissao,cpf,rg} }
+// Regras: estado civil ANTES do endereço; regime SÓ se casado;
+//   cônjuge-anuente -> "casado com X ... sob o regime ..., residentes e domiciliados";
+//   dois titulares casados entre si -> "FULANO, ..., e FULANA, ..., casados ..., residentes ...".
+
+const clean = s => String(s || '').replace(/\D/g, '');
+const gen = p => { const n = String(p && p.nacionalidade || '').toLowerCase().trim(); return n.endsWith('a') ? 'f' : (n.endsWith('o') ? 'm' : 'x'); };
+const W = (g, m, f) => g === 'f' ? f : (g === 'm' ? m : (m + '(a)'));
+const nomeBold = s => '**' + String(s || '').trim() + '**';
+
+function identidade(p) {
+  const g = gen(p);
+  const segs = [nomeBold(p.nome)];
+  if (p.nacionalidade) segs.push(p.nacionalidade);
+  if (p.profissao) segs.push(p.profissao);
+  if (p.rg) segs.push(W(g, 'portador', 'portadora') + ' do RG nº ' + p.rg + (p.rg_orgao ? (' — ' + p.rg_orgao) : ' [a completar: órgão expedidor]'));
+  if (p.cpf) segs.push(W(g, 'inscrito', 'inscrita') + ' no CPF sob o nº ' + p.cpf);
+  if (p.email) segs.push('e-mail ' + p.email);
+  return segs.join(', ');
+}
+function estadoCivilSimples(p) {
+  const ec = String(p.estado_civil || '').toLowerCase(), g = gen(p);
+  if (ec.startsWith('solteir')) return W(g, 'solteiro', 'solteira');
+  if (ec.startsWith('divorc')) return W(g, 'divorciado', 'divorciada');
+  if (ec.startsWith('vi')) return W(g, 'viúvo', 'viúva');
+  if (ec.startsWith('cas')) return W(g, 'casado', 'casada');
+  return p.estado_civil || '[a completar: estado civil]';
+}
+function regimeFrase(p) {
+  return p.regime_bens ? ('sob o regime da ' + p.regime_bens) : '[a completar: regime de bens]';
+}
+function enderecoFrase(p, plural) {
+  const e = p.endereco || '[a completar: endereço]';
+  return (plural ? 'residentes e domiciliados' : W(gen(p), 'residente e domiciliado', 'residente e domiciliada')) + ' na ' + e;
+}
+function conjugeSegs(c) {
+  const g = gen(c), segs = [nomeBold(c.nome)];
+  if (c.nacionalidade) segs.push(c.nacionalidade);
+  if (c.profissao) segs.push(c.profissao);
+  if (c.cpf) segs.push(W(g, 'inscrito', 'inscrita') + ' no CPF sob o nº ' + c.cpf);
+  return segs.join(', ');
+}
+function qualificarUm(p) {
+  const ec = String(p.estado_civil || '').toLowerCase();
+  if (ec.startsWith('cas')) {
+    if (p.conjuge && (p.conjuge.nome || p.conjuge.cpf)) {
+      return identidade(p) + ', ' + W(gen(p), 'casado', 'casada') + ' com ' + conjugeSegs(p.conjuge) + ', ' + regimeFrase(p) + ', ' + enderecoFrase(p, true);
+    }
+    return identidade(p) + ', ' + estadoCivilSimples(p) + ' ' + regimeFrase(p) + ', ' + enderecoFrase(p, false);
+  }
+  return identidade(p) + ', ' + estadoCivilSimples(p) + ', ' + enderecoFrase(p, false);
+}
+function qualificarLado(lista) {
+  lista = (lista || []).filter(Boolean);
+  if (!lista.length) return '[a completar: qualificação]';
+  if (lista.length === 2) {
+    const [a, b] = lista;
+    const casados = /^cas/i.test(a.estado_civil || '') && /^cas/i.test(b.estado_civil || '');
+    const link = (a.conjuge && clean(a.conjuge.cpf) && clean(a.conjuge.cpf) === clean(b.cpf))
+              || (b.conjuge && clean(b.conjuge.cpf) && clean(b.conjuge.cpf) === clean(a.cpf))
+              || ((a.endereco || '') !== '' && (a.endereco || '') === (b.endereco || ''));
+    if (casados && link) {
+      const reg = a.regime_bens ? regimeFrase(a) : regimeFrase(b);
+      return identidade(a) + ', e ' + identidade(b) + ', casados ' + reg + ', ' + enderecoFrase(a, true);
+    }
+  }
+  return lista.map(qualificarUm).join('; e ');
+}
+function prepararQualificacoes(fatos) {
+  const vend = (Array.isArray(fatos.vendedores) && fatos.vendedores.length) ? fatos.vendedores : (fatos.vendedor ? [fatos.vendedor] : []);
+  const comp = (Array.isArray(fatos.compradores) && fatos.compradores.length) ? fatos.compradores : (fatos.comprador ? [fatos.comprador] : []);
+  fatos.qualificacao_vendedor = qualificarLado(vend);
+  fatos.qualificacao_comprador = qualificarLado(comp);
+}
+
 function lerPrompt() {
   try { return fs.readFileSync(PROMPT_PATH, "utf8"); }
   catch (e) { throw new Error("prompt do CCV não encontrado em " + PROMPT_PATH); }
@@ -138,6 +218,7 @@ function validar(saida) {
 
 async function gerarCCV(fatos) {
   if (!fatos || typeof fatos !== "object") throw new Error("FATOS ausentes ou inválidos");
+  prepararQualificacoes(fatos); // injeta qualificacao_vendedor / qualificacao_comprador (verbatim para o prompt)
   const saida = await chamarClaude(fatos);
   saida._validacao = validar(saida);
   try { saida._html = renderCcvHTML(saida, fatos); } catch (e) { saida._html_erro = String(e && e.message || e); }
