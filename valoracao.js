@@ -93,6 +93,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
 
   // 4) preço de anúncio sugerido
   const anuncio = opts.anuncio_override ?? Math.min(tetoConc, tetoCorrecao);
+  // quem realmente travou o preço: concorrência só limita se estiver <= teto de correção
+  const limitadoPorConc = isFinite(tetoConc) && tetoConc <= tetoCorrecao;
 
   // 5) fechamento, valor de mercado e faixa
   const fechamento  = anuncio * (1 - desagio);
@@ -120,8 +122,12 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       ? `R$ ${(faixaMin/1e6).toFixed(decs(faixaMin)).replace(".",",")} a ${(faixaMax/1e6).toFixed(decs(faixaMax)).replace(".",",")} milhões`
       : `${reais(faixaMin)} a ${reaisN(faixaMax)}`,
     anuncio_sugerido: milhoes(anuncio),
-    anuncio_sub: `alinhado ao concorrente direto · fechamento esperado ~${mi(fechamento)}`,
-    conclusao_apoio: `Ancorado na venda real do próprio prédio (ITBI) e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(anuncio)}).`,
+    anuncio_sub: `${limitadoPorConc ? "alinhado ao concorrente direto" : "ancorado no ITBI corrigido pelo IPCA"} · fechamento esperado ~${mi(fechamento)}`,
+    conclusao_apoio: limitadoPorConc
+      ? `Ancorado na venda real do próprio prédio (ITBI) e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(tetoConc)}).`
+      : (concorrente
+          ? `Ancorado na venda real do próprio prédio (ITBI) corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
+          : `Ancorado na venda real do próprio prédio (ITBI) corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`),
     _debug: {
       anchor: aV, fator: +fator.toFixed(4), teto_correcao: Math.round(tetoCorrecao),
       teto_concorrencia: isFinite(tetoConc)?tetoConc:null, anuncio, fechamento: Math.round(fechamento),
