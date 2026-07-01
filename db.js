@@ -21,8 +21,8 @@ WITH base AS (
     valor_transacao::numeric        AS valor,
     valor_m2::numeric               AS valor_m2
   FROM vendidos_itbi_usados
-  WHERE regexp_replace(numero::text, '\\D', '', 'g') = $1
-    AND regexp_replace(cep::text,    '\\D', '', 'g') = $2
+  WHERE regexp_replace(split_part(numero::text, '.', 1), '\\D', '', 'g') = $1
+    AND regexp_replace(split_part(cep::text,    '.', 1), '\\D', '', 'g') = $2
     AND valor_transacao::numeric > 0
     AND area_construida::numeric  > 0
 ),
