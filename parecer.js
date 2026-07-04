@@ -48,7 +48,6 @@ async function chamarClaude(fatos) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 16000,
-      temperature: 0,
       system,
       messages: [{ role: "user", content: userMsg }],
     }),
