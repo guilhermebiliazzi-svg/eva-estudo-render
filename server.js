@@ -28,6 +28,7 @@ const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 const { runBackfillBatch } = require("./backfill_geo");
 const { gerarParecer } = require("./parecer");
+const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
 
 const PORT = process.env.PORT || 3000;
