@@ -89,6 +89,7 @@ app.post("/amostras", async (req, res) => {
 app.post("/parecer", async (req, res) => {
   try {
     const saida = await gerarParecer(req.body || {});
+    saida._html = renderParecerHTML(saida, req.body || {});
     res.json(saida);
   } catch (e) {
     console.error("erro /parecer:", e);
