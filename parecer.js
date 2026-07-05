@@ -80,7 +80,7 @@ async function chamarClaude(fatos) {
       model: MODEL,
       max_tokens: 16000,
       system,
-      messages: [{ role: "user", content: userMsg }],
+      messages: [{ role: "user", content }],
     }),
   });
 
