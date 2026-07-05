@@ -38,8 +38,25 @@ async function chamarClaude(fatos) {
   // PDFs individuais acima de ~6 MB em base64 (ex.: atas escaneadas) são pulados
   // para não estourar os limites da API; ficam listados como não anexados.
   const todos = Array.isArray(fatos.documentos_pdf) ? fatos.documentos_pdf.filter(d => d && d.base64) : [];
-  const docs = todos.filter(d => d.base64.length <= 6 * 1024 * 1024);
-  const pulados = todos.filter(d => d.base64.length > 6 * 1024 * 1024);
+  const ehPdf = (d) => String(d.base64).slice(0, 6) === "JVBERi"; // "%PDF" em base64
+  const docs = todos.filter(d => ehPdf(d) && d.base64.length <= 6 * 1024 * 1024);
+  const pulados = todos.filter(d => ehPdf(d) && d.base64.length > 6 * 1024 * 1024);
+  // Arquivos que não são PDF de verdade (ex.: certidões TRT2 emitidas como HTML):
+  // extrai o texto e injeta na mensagem para o modelo ler mesmo assim.
+  const naoPdf = todos.filter(d => !ehPdf(d));
+  const textosExtraidos = naoPdf.map(d => {
+    let t = "";
+    try {
+      t = Buffer.from(d.base64, "base64").toString("utf8")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 20000);
+    } catch (e) { t = "(conteúdo ilegível)"; }
+    return "### " + (d.label || "documento") + "\n" + t;
+  });
   const fatosTexto = Object.assign({}, fatos);
   delete fatosTexto.documentos_pdf;
 
@@ -52,9 +69,14 @@ async function chamarClaude(fatos) {
       pulados.map(d => d.label || "documento").join("; ") + "."
     : "";
 
+  const listaTextos = textosExtraidos.length
+    ? "\n\nDOCUMENTOS RECEBIDOS EM FORMATO TEXTO/HTML (conteúdo extraído abaixo):\n\n" +
+      textosExtraidos.join("\n\n")
+    : "";
+
   const userMsg =
     "FATOS da diligência (JSON):\n" + JSON.stringify(fatosTexto, null, 2) +
-    listaDocs + listaPulados +
+    listaDocs + listaPulados + listaTextos +
     "\n\nGere o parecer e responda APENAS com o objeto JSON conforme o schema. " +
     "Sem texto fora do JSON e sem cercas de código.";
 
