@@ -33,10 +33,41 @@ async function chamarClaude(fatos) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada no Render");
 
   const system = lerPrompt();
+
+  // Documentos PDF anexados — o modelo lê o conteúdo direto (blocos "document").
+  // PDFs individuais acima de ~6 MB em base64 (ex.: atas escaneadas) são pulados
+  // para não estourar os limites da API; ficam listados como não anexados.
+  const todos = Array.isArray(fatos.documentos_pdf) ? fatos.documentos_pdf.filter(d => d && d.base64) : [];
+  const docs = todos.filter(d => d.base64.length <= 6 * 1024 * 1024);
+  const pulados = todos.filter(d => d.base64.length > 6 * 1024 * 1024);
+  const fatosTexto = Object.assign({}, fatos);
+  delete fatosTexto.documentos_pdf;
+
+  const listaDocs = docs.length
+    ? "\n\nDOCUMENTOS ANEXADOS (leia o conteúdo destes PDFs): " +
+      docs.map(d => d.label || "documento").join("; ") + "."
+    : "";
+  const listaPulados = pulados.length
+    ? "\n\nDOCUMENTOS NÃO ANEXADOS POR TAMANHO (considere-os presentes no dossiê, sem ler o conteúdo): " +
+      pulados.map(d => d.label || "documento").join("; ") + "."
+    : "";
+
   const userMsg =
-    "FATOS da diligência (JSON):\n" + JSON.stringify(fatos, null, 2) +
+    "FATOS da diligência (JSON):\n" + JSON.stringify(fatosTexto, null, 2) +
+    listaDocs + listaPulados +
     "\n\nGere o parecer e responda APENAS com o objeto JSON conforme o schema. " +
     "Sem texto fora do JSON e sem cercas de código.";
+
+  const content = [];
+  for (const d of docs) {
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: d.media_type || "application/pdf", data: d.base64 },
+      title: d.label || "documento",
+      citations: { enabled: false },
+    });
+  }
+  content.push({ type: "text", text: userMsg });
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
