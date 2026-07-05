@@ -40,7 +40,7 @@ if (process.env.DATABASE_URL) {
 }
 
 const app = express();
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "50mb" }));
 require("./preencher_pdf")(app);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
