@@ -106,7 +106,7 @@ Para dirimir eventuais controvérsias envolvendo o objeto do presente, as partes
 
 ## §3 AS TRÊS CAMADAS
 - **FIXO** — reproduza palavra por palavra (vide §1).
-- **VARIÁVEL** — preencha dos FATOS: qualificações, descrição registral, preço, conta bancária, valores/momentos das parcelas, split, prazos, lista de pendentes, data, testemunhas.
+- **VARIÁVEL** — preencha dos FATOS: qualificações, descrição registral, preço, conta(s) bancária(s) e a divisão do crédito entre elas, valores/momentos das parcelas, pagador e alínea de abatimento da comissão, split, prazos, lista de pendentes, data, testemunhas.
 - **CONDICIONAL** — ligue/desligue conforme §4.
 
 ## §4 REGRAS CONDICIONAIS
@@ -116,8 +116,12 @@ Para dirimir eventuais controvérsias envolvendo o objeto do presente, as partes
 **(b) Item 5 — título definitivo.** Se há parcela de **financiamento** (qualquer parcela com `tipo: "financiamento"`): mantenha a redação "lavrar-se-á escritura pública de venda e compra ou, na hipótese de financiamento, o instrumento particular de financiamento com garantia de alienação fiduciária, com força de escritura pública (art. 61, §5º, da Lei nº 4.380/1964)". Se **NÃO há financiamento** (à vista / FGTS / recursos próprios apenas): use "lavrar-se-á escritura pública de venda e compra" e **suprima** a menção ao financiamento, à alienação fiduciária e ao art. 61.
 **(c) Item 7.4.2.** Se há **sinal** (`fatos.pagamento.tem_sinal: true`): reproduza "Sendo a resolução motivada por dolo ou culpa da PARTE COMPRADORA, esta pagará à PARTE VENDEDORA a multa penal compensatória de 10% sobre o valor deste contrato, podendo a PARTE VENDEDORA reter o valor do sinal e princípio de pagamento (parcela "a" do preço)." Se **não há sinal**, use a mesma cláusula **sem** o trecho de retenção do sinal.
 
-### §4.2 Item 3.1 — forma de crédito / conta bancária
-Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento próprio; comissão é a do Item 6) e indique o crédito por transferência à conta da PARTE VENDEDORA: {banco, agência, conta} dos FATOS. Se a conta não vier nos FATOS, escreva `[a completar]` no lugar dos dados bancários e registre em `pendencias_preenchimento`.
+### §4.2 Item 3.1 — forma de crédito / conta(s) bancária(s)
+Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento próprio; comissão é a do Item 6) e indique o crédito por transferência bancária, conforme a fonte disponível nos FATOS:
+- **Conta única** — quando houver apenas `fatos.pagamento.conta_vendedora` (ou `fatos.pagamento.contas_vendedoras` com um único item): "...à conta de titularidade da PARTE VENDEDORA — Banco {banco}, Agência {agência}, Conta {conta}".
+- **Múltiplas contas** — quando `fatos.pagamento.contas_vendedoras` tiver 2 ou mais itens (ex.: vários vendedores/herdeiros): redija que as quantias devidas à PARTE VENDEDORA serão creditadas de forma rateada entre as contas abaixo, na proporção indicada, listando (i), (ii), (iii)... cada conta com: percentual (algarismo + por extenso) ou valor que lhe cabe, titular (com CPF/CNPJ quando constar), banco, agência e conta. Ex.: "(i) 25% (vinte e cinco por cento) a FULANA DE TAL, CPF nº 000.000.000-00 — Banco X, Agência Y, Conta Z". **É proibido reduzir múltiplas contas a uma só ou omitir a divisão**: se `contas_vendedoras` tem N itens, o item 3.1 lista N contas.
+- **Aritmética da divisão:** os percentuais devem somar 100% (ou os valores, o total a creditar). Se os FATOS vierem inconsistentes, **não ajuste**: reproduza como veio e registre a divergência em `alertas`.
+- **Dado ausente** (nenhuma conta nos FATOS, ou campo faltante de uma conta — banco, agência, conta, percentual, titular): escreva `[a completar]` no lugar exato e registre entrada específica em `pendencias_preenchimento`.
 
 ### §4.3 Item 1.1 — outorga conjugal
 - Se o vendedor for **casado em separação total de bens** e o imóvel for **bem particular** (adquirido antes do casamento ou por herança), reproduza a dispensa de outorga (art. 1.647 CC): a cônjuge **não** assina.
@@ -130,7 +134,16 @@ Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento pró
 Liste **exatamente** as certidões em aberto recebidas em `fatos.certidoes_pendentes` (a fonte é o painel; itens com status diferente de concluído/validado), com o prazo `prazo_pendentes` dias. Se a lista vier vazia, troque o item 5.3 por: "As partes reconhecem que, nesta data, não há certidões pendentes de obtenção." Não invente itens; não omita itens recebidos.
 
 ### §4.5 Item 6 — comissão e split
-Componha a cláusula da comissão com: valor total (algarismo + extenso + percentual), o momento/forma do pagamento conforme `fatos.comissao.condicao_pagamento`, e a lista de partícipes/credores de `fatos.comissao.split`, cada um com nome, CNPJ/CPF, CRECI e valor (algarismo + extenso). A soma do split **deve igualar** o valor total da comissão.
+A cláusula da comissão tem **redação semi-fixa**. Reproduza o gabarito abaixo, preenchendo os campos dos FATOS:
+
+"A comissão pela assessoria e intermediação, no valor total de R$ {comissao.total} ({por extenso}), equivalente a {comissao.percentual}% ({percentual por extenso}) do preço, será paga {comissao.condicao_pagamento}, {TRECHO DO PAGADOR}, tendo como partícipes e credores: (i) {credor 1, CNPJ/CPF, CRECI, valor em algarismo + extenso}; (ii) ...".
+
+**{TRECHO DO PAGADOR} — componente obrigatório da cláusula; é PROIBIDO suprimi-lo:**
+- `fatos.comissao.pagador = "comprador"` → "abatida da parcela indicada da PARTE COMPRADORA (alínea "{fatos.comissao.parcela_abatimento}" do Item 3) e repassada por conta e ordem da PARTE VENDEDORA". Nomeie a parcela pela natureza da alínea correspondente no Item 3 (ex.: "abatida da parcela de recursos próprios da PARTE COMPRADORA (alínea "b" do Item 3)"). Se `parcela_abatimento` não vier nos FATOS: "abatida da parcela `[a completar: alínea do Item 3]` e repassada por conta e ordem da PARTE VENDEDORA" + pendência.
+- `fatos.comissao.pagador = "vendedor"` → "paga diretamente pela PARTE VENDEDORA" — sem abatimento de alínea e sem repasse por conta e ordem.
+- `fatos.comissao.pagador` **ausente** → escreva no lugar do trecho: "`[a completar: responsável pelo pagamento da comissão (comprador ou vendedor) e, se comprador, a alínea do Item 3 da qual será abatida]`" e registre pendência específica. **A ausência do dado vira `[a completar]` visível no corpo — nunca supressão silenciosa de quem paga e de qual parcela a comissão é abatida.**
+
+Lista de partícipes/credores de `fatos.comissao.split`: cada um com nome, CNPJ/CPF, CRECI e valor (algarismo + extenso); campo faltante de um partícipe → `[a completar]` + pendência. A soma do split **deve igualar** o valor total da comissão.
 
 ### §4.6 Assinaturas
 Gere um bloco de assinatura para: a PARTE VENDEDORA (e cônjuge, se exigida outorga — §4.3); a PARTE COMPRADORA (e cônjuge, conforme os FATOS); **cada** intermediador presente em `fatos.comissao.split` (nome + CNPJ/CPF + CRECI); e duas testemunhas (linhas em branco com Nome/CPF a completar). Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
