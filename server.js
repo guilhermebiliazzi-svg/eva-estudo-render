@@ -1,4 +1,4 @@
-|/**
+/**
  * EVA · Serviço de render do Estudo de Mercado (HTTP).
  * A EVA (n8n) faz POST /estudo com o input do imóvel e recebe o .pptx de volta.
  *
