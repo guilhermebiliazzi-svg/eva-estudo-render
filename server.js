@@ -42,6 +42,7 @@ if (process.env.DATABASE_URL) {
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 require("./preencher_pdf")(app);
+require("./recibo_repasse")(app, pool);  // executa na hora, sem guardar
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
