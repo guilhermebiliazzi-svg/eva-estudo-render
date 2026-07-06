@@ -232,7 +232,9 @@ app.post("/estudo", async (req, res) => {
     fs.createReadStream(out).pipe(res).on("close", () => fs.unlink(out, () => {}));
   } catch (e) {
     console.error("erro /estudo:", e);
-    res.status(500).json({ error: String(e && e.message || e) });
+    const code = e.code || null;
+    // 422 quando não há ITBI -> o n8n distingue de erro real e responde honesto ao corretor
+    res.status(code === "NO_ITBI_DATA" ? 422 : 500).json({ error: String(e && e.message || e), code });
   }
 });
 
