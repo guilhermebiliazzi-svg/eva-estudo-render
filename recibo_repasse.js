@@ -32,11 +32,18 @@ function brl(n) {
   return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function competenciaTexto(comp) {
-  // comp = 'YYYY-MM-DD' -> "julho de 2026"
+  // aceita Date (do pg) ou string 'YYYY-MM-DD' -> "julho de 2026"
   if (!comp) return "";
-  const [y, m] = String(comp).split("-");
-  const idx = parseInt(m, 10) - 1;
-  return `${MESES[idx] || m} de ${y}`;
+  let y, mIdx;
+  if (comp instanceof Date) {
+    y = comp.getFullYear();
+    mIdx = comp.getMonth();
+  } else {
+    const [yy, mm] = String(comp).split("-");
+    y = yy;
+    mIdx = parseInt(mm, 10) - 1;
+  }
+  return `${MESES[mIdx] || ""} de ${y}`;
 }
 
 // ---- monta o PDF a partir do repasse + snapshot ----
@@ -190,7 +197,11 @@ module.exports = function (app, pool) {
       }
 
       const bytes = await montarPDF(repasse);
-      const nome = `repasse-${repasse.contrato_id}-${String(repasse.competencia).slice(0, 7)}.pdf`;
+      // competência como YYYY-MM (pode vir como Date do pg ou string)
+      const compStr = repasse.competencia instanceof Date
+        ? `${repasse.competencia.getFullYear()}-${String(repasse.competencia.getMonth() + 1).padStart(2, "0")}`
+        : String(repasse.competencia).slice(0, 7);
+      const nome = `repasse-${repasse.contrato_id}-${compStr}.pdf`;
       const pdfUrl = await subirStorage(nome, bytes);
 
       await pool.query(`update adm_repasses set pdf_url = $1, updated_at = now() where id = $2`,
