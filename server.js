@@ -28,6 +28,7 @@ const { gerarEstudo, gerarEstudoFromDB } = require("./orchestrator");
 const { gerarEstudoCasa, gerarEstudoCasaFromDB } = require("./orchestrator_casa");
 const { runBackfillBatch } = require("./backfill_geo");
 const { gerarParecer } = require("./parecer");
+const { auditarCertidao } = require("./auditor_cnd");
 const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
 
@@ -88,6 +89,32 @@ app.post("/amostras", async (req, res) => {
 
 // === Parecer de diligência (tijolo C) ===
 // Recebe os FATOS montados pelo n8n, chama o Claude, valida e devolve o JSON do parecer.
+// === Auditoria de certidão (fallback do WF-07 quando o Gemini falha) ===
+// O WF-07 chama esta rota quando a auditoria no Gemini não devolve JSON válido.
+// Aceita `pdfBase64` (nome usado pelo WF-07) ou `fileBase64` e devolve o JSON já
+// normalizado no formato que o WF-07 espera ({ resultado, divergencia, observacao, ... }).
+app.post("/auditar-certidao", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const fileBase64 = b.pdfBase64 || b.fileBase64;
+    if (!fileBase64) {
+      return res.status(400).json({ error: "pdfBase64 (ou fileBase64) ausente" });
+    }
+    const saida = await auditarCertidao({
+      fileBase64,
+      tipo: b.tipo,
+      titular: b.titular,
+      documento: b.documento,
+      candidatas: b.candidatas,
+      nome: b.nome,
+    });
+    res.json(saida);
+  } catch (e) {
+    console.error("erro /auditar-certidao:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
 app.post("/parecer", async (req, res) => {
   try {
     const saida = await gerarParecer(req.body || {});
