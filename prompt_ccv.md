@@ -17,15 +17,15 @@ O documento abaixo é o padrão "Rebouças". Use-o como gabarito de estrutura, e
 
 **Das Partes**
 
-De um lado, na qualidade de promitente vendedor, doravante denominado PARTE VENDEDORA: {reproduza AQUI, VERBATIM, o texto de `fatos.qualificacao_vendedor` — não altere nenhuma palavra, ordem ou pontuação; ele já traz nome, qualificação, estado civil (com regime apenas se casado), cônjuge quando houver e endereço};
+De um lado, na qualidade de {promitente vendedor | promitentes vendedores — ver §4.0}, doravante {denominado | denominados} PARTE VENDEDORA: {qualificação de CADA pessoa do polo vendedor, montada a partir de `fatos.vendedores` (PF) e `fatos.vendedoresPJ`, separadas por "; e " — ver §4.0};
 
-E de outro, na qualidade de promissária compradora, doravante denominada PARTE COMPRADORA: {reproduza AQUI, VERBATIM, o texto de `fatos.qualificacao_comprador` — não altere nenhuma palavra, ordem ou pontuação}.
+E de outro, na qualidade de {promissário comprador | promissários compradores — ver §4.0}, doravante {denominado | denominados} PARTE COMPRADORA: {qualificação de CADA pessoa do polo comprador, montada a partir de `fatos.compradores` (PF) e `fatos.compradoresPJ`, separadas por "; e " — ver §4.0}.
 
 Declarando, expressamente, não manterem relações de união estável com terceiros não nominados, nos termos do art. 1.723 do Código Civil e sob suas responsabilidades civil e criminal.
 
 **1. Do Objeto**
 
-A PARTE VENDEDORA declara-se proprietária e possuidora do imóvel situado na {endereço completo do imóvel com CEP}, registrado sob a matrícula nº {matrícula} do {Nº} Oficial de Registro de Imóveis da Comarca de São Paulo, Contribuinte nº {contribuinte} junto à Prefeitura local, assim descrito em sua matrícula: {descrição registral completa — unidade, andar, bloco, edifício, esquina, subdistrito, área útil, área comum, vagas, área total, fração ideal}.
+A PARTE VENDEDORA declara-se proprietária e possuidora do imóvel situado na {endereço completo do imóvel com CEP}, {registrado sob a matrícula nº {matrícula} | registrado sob as matrículas nºs {mat1} e {mat2} — inclua TODAS as matrículas do negócio, ver §4.0} do {Nº} Oficial de Registro de Imóveis da Comarca de São Paulo, Contribuinte nº {contribuinte} junto à Prefeitura local, assim descrito em sua matrícula: {descrição registral completa — unidade, andar, bloco, edifício, esquina, subdistrito, área útil, área comum, vagas, área total, fração ideal}.
 
 **1.1. **{cláusula de outorga conjugal — ver §4.3}
 
@@ -71,7 +71,7 @@ A posse do imóvel será entregue à PARTE COMPRADORA, livre de pessoas e objeto
 
 {cláusula da comissão — ver §4.5}
 
-**6.1. **Atendendo à conveniência das partes, a intermediadora emitirá cobrança bancária única no valor integral da comissão que, uma vez paga, observará eventual rateio (split) entre os profissionais partícipes, sem prejuízo da responsabilidade de cada qual pelos respectivos aspectos fiscais, inclusive emissão de Nota Fiscal de Serviço, Recibo Simples ou Recibo de Pagamento Autônomo.
+**6.1. **A parcela devida a cada intermediador ser-lhe-á creditada diretamente, na forma dos subitens abaixo. Cada intermediador responde pelos respectivos aspectos fiscais e tributários da parcela que lhe cabe, inclusive pela emissão de Nota Fiscal de Serviço, Recibo Simples ou Recibo de Pagamento Autônomo, sem solidariedade entre eles. {subitens de forma de recebimento — ver §4.5}
 
 **7. Da Irretratabilidade e das Cominações**
 
@@ -111,6 +111,21 @@ Para dirimir eventuais controvérsias envolvendo o objeto do presente, as partes
 
 ## §4 REGRAS CONDICIONAIS
 
+### §4.0 Concordância dos polos, qualificação e matrículas
+
+**Número dos polos.** Use `fatos.polos.vendedores_qtd` e `fatos.polos.compradores_qtd`, somando o cônjuge quando ele integrar o polo (§4.3).
+- 1 pessoa: "promitente vendedor"/"promitente vendedora", "denominado"/"denominada"; "promissário comprador"/"promissária compradora".
+- 2 ou mais: **"promitentes vendedores"**, **"denominados"**, **"promissários compradores"**. Use sempre o masculino plural em polo misto.
+- **Cônjuge que integra o polo é PARTE, não anuente.** Em bem comum (comunhão parcial/universal), marido e mulher são AMBOS promitentes vendedores — conte os dois e qualifique os dois no polo. O mesmo vale para aquisição por casal no polo comprador.
+
+**Gênero.** Resolva pelo prenome de cada pessoa (Divaldo → masculino; Janicleide → feminino) e escreva a forma correta: "brasileiro"/"brasileira", "portador"/"portadora", "inscrito"/"inscrita", "casado"/"casada", "residente e domiciliado"/"residente e domiciliada"; no plural, "residentes e domiciliados". **É PROIBIDO escrever as formas com parênteses** — nunca "brasileiro(a)", "casado(a)", "portador(a)", "inscrito(a)". Se o prenome for ambíguo, escreva a forma masculina e registre alerta.
+
+**Estado civil e regime.** Use SEMPRE `estado_civil_texto` e `regime_bens_texto` dos FATOS, que já vêm por extenso ("comunhão parcial de bens"). **É PROIBIDO reproduzir o valor cru do campo** — nunca "comunhao_parcial", "separacao_total", "uniao_estavel" ou qualquer texto com underscore. Se só houver o valor cru, traduza-o para português corrente.
+
+**Endereço.** Inclua cidade e UF. Ausentes nos FATOS, escreva `[a completar: cidade/UF do endereço de {nome}]` e registre pendência.
+
+**Matrículas.** O objeto (Item 1) deve conter **todas** as matrículas que compõem o negócio — inclusive vaga de garagem ou box com matrícula autônoma. Havendo mais de uma, redija no plural ("registrado sob as matrículas nºs X e Y") e transcreva a descrição registral de **cada** uma. Nenhuma matrícula citada em outro ponto do instrumento (p. ex. no Item 5.3) pode ficar fora do Item 1: se aparecer, ou entra no objeto, ou registre alerta explicando por que não integra a venda.
+
 ### §4.1 Preço, pagamento e título definitivo
 **(a) Alíneas do Item 3.** Monte uma alínea (a, b, c, d…) para CADA parcela presente em `fatos.pagamento.parcelas`, na ordem em que vierem, com valor em algarismo + por extenso e a descrição da origem (sinal; FGTS; recursos próprios; financiamento bancário com alienação fiduciária; saldo à vista). Não crie alínea para parcela ausente. Os valores das alíneas **devem somar exatamente o preço**.
 **(b) Item 5 — título definitivo.** Se há parcela de **financiamento** (qualquer parcela com `tipo: "financiamento"`): mantenha a redação "lavrar-se-á escritura pública de venda e compra ou, na hipótese de financiamento, o instrumento particular de financiamento com garantia de alienação fiduciária, com força de escritura pública (art. 61, §5º, da Lei nº 4.380/1964)". Se **NÃO há financiamento** (à vista / FGTS / recursos próprios apenas): use "lavrar-se-á escritura pública de venda e compra" e **suprima** a menção ao financiamento, à alienação fiduciária e ao art. 61.
@@ -125,7 +140,7 @@ Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento pró
 
 ### §4.3 Item 1.1 — outorga conjugal
 - Se o vendedor for **casado em separação total de bens** e o imóvel for **bem particular** (adquirido antes do casamento ou por herança), reproduza a dispensa de outorga (art. 1.647 CC): a cônjuge **não** assina.
-- Caso o regime exija outorga (comunhão parcial sobre bem adquirido na constância, comunhão universal etc.), **substitua** o item 1.1 por declaração de que se trata de bem comum/sujeito a outorga e inclua o cônjuge entre os signatários do bloco de assinaturas.
+- Caso o regime exija outorga (comunhão parcial sobre bem adquirido na constância, comunhão universal etc.), **substitua** o item 1.1 por declaração de que se trata de bem comum e inclua o cônjuge entre os signatários. **Sendo bem comum, o cônjuge integra o polo como parte** — qualifique-o junto com o outro no bloco Das Partes, conte-o em `polos` para efeito de plural (§4.0), e no bloco de assinaturas identifique-o como **PARTE VENDEDORA**, não como "cônjuge anuente". A expressão "cônjuge anuente" só cabe quando o bem é particular do outro e a assinatura serve apenas de outorga.
 - Se o estado civil/regime do vendedor não constar dos FATOS, escreva `[a completar]` e registre a pendência — não presuma o regime.
 - - **Vendedor não casado (solteiro, viúvo ou divorciado).** Não há outorga conjugal: `outorga_conjugal_exigida: false`, nenhum cônjuge no bloco de assinaturas, e o item 1.1 declara que o imóvel é bem particular, dispensada a outorga — nunca nomeie cônjuge inexistente nem crie `[a completar]` de cônjuge. **Não** inclua ressalva de partilha de cônjuge falecido ou de ex-cônjuge, A MENOS QUE os FATOS (`vendedor.obs`) ou a matrícula indiquem expressamente que a titularidade integral depende de partilha ainda não concluída.
 - **Natureza do bem pela qualificação no ato de aquisição.** Leia, na matrícula, como o vendedor foi qualificado **no ato (R.) que lhe transmitiu o bem**. Se ali consta **viúvo(a), solteiro(a) ou divorciado(a)**, o imóvel é **bem particular** dele: é proibido gerar ressalva, cláusula ou `[a completar]` sobre espólio/herdeiros/partilha de cônjuge falecido **anterior** a essa aquisição — esse cônjuge não tem direito sobre o bem. Só cabe ressalva de partilha quando o bem foi adquirido **na constância** de casamento depois desfeito (divórcio/morte) sem partilha concluída sobre o próprio imóvel. Para vendedor hoje viúvo, a única verificação remanescente é o estado civil **atual** (se voltou a casar), e só para fins de outorga.
@@ -134,19 +149,28 @@ Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento pró
 Liste **exatamente** as certidões em aberto recebidas em `fatos.certidoes_pendentes` (a fonte é o painel; itens com status diferente de concluído/validado), com o prazo `prazo_pendentes` dias. Se a lista vier vazia, troque o item 5.3 por: "As partes reconhecem que, nesta data, não há certidões pendentes de obtenção." Não invente itens; não omita itens recebidos.
 
 ### §4.5 Item 6 — comissão e split
-A cláusula da comissão tem **redação semi-fixa**. Reproduza o gabarito abaixo, preenchendo os campos dos FATOS:
 
-"A comissão pela assessoria e intermediação, no valor total de R$ {comissao.total} ({por extenso}), equivalente a {comissao.percentual}% ({percentual por extenso}) do preço, será paga {comissao.condicao_pagamento}, {TRECHO DO PAGADOR}, tendo como partícipes e credores: (i) {credor 1, CNPJ/CPF, CRECI, valor em algarismo + extenso}; (ii) ...".
+**Todos os partícipes são intermediadores.** Ville Jardins, corretores autônomos e imobiliárias parceiras figuram em pé de igualdade: cada um prestou serviço de intermediação, é **credor direto** da sua parcela perante a fonte pagadora e emite o próprio documento fiscal. **É PROIBIDO** redigir qualquer trecho que descreva um intermediador recebendo o valor integral e repassando aos demais, ou que trate a Ville Jardins como "a intermediadora" em oposição aos outros. No caput, use "tendo como intermediadores e credores".
 
-**{TRECHO DO PAGADOR} — componente obrigatório da cláusula; é PROIBIDO suprimi-lo:**
-- `fatos.comissao.pagador = "comprador"` → "abatida da parcela indicada da PARTE COMPRADORA (alínea "{fatos.comissao.parcela_abatimento}" do Item 3) e repassada por conta e ordem da PARTE VENDEDORA". Nomeie a parcela pela natureza da alínea correspondente no Item 3 (ex.: "abatida da parcela de recursos próprios da PARTE COMPRADORA (alínea "b" do Item 3)"). Se `parcela_abatimento` não vier nos FATOS: "abatida da parcela `[a completar: alínea do Item 3]` e repassada por conta e ordem da PARTE VENDEDORA" + pendência.
-- `fatos.comissao.pagador = "vendedor"` → "paga diretamente pela PARTE VENDEDORA" — sem abatimento de alínea e sem repasse por conta e ordem.
-- `fatos.comissao.pagador` **ausente** → escreva no lugar do trecho: "`[a completar: responsável pelo pagamento da comissão (comprador ou vendedor) e, se comprador, a alínea do Item 3 da qual será abatida]`" e registre pendência específica. **A ausência do dado vira `[a completar]` visível no corpo — nunca supressão silenciosa de quem paga e de qual parcela a comissão é abatida.**
+**Caput.** Preencha dos FATOS: valor total, percentual, `condicao_pagamento` e o trecho do pagador. Liste cada intermediador com nome, CNPJ/CPF, CRECI e valor (algarismo + extenso). Campo faltante → `[a completar]` + pendência.
 
-Lista de partícipes/credores de `fatos.comissao.split`: cada um com nome, CNPJ/CPF, CRECI e valor (algarismo + extenso); campo faltante de um partícipe → `[a completar]` + pendência. A soma do split **deve igualar** o valor total da comissão.
+**Trecho do pagador** (`comissao.pagador`): comprador → "por conta e ordem da PARTE VENDEDORA", com abatimento da alínea indicada do Item 3; vendedor → "paga diretamente pela PARTE VENDEDORA", sem conta e ordem e sem abatimento; ausente → `[a completar: responsável pelo pagamento da comissão (comprador ou vendedor) e, se comprador, a alínea do Item 3 da qual será abatida]` + pendência.
+
+**Concordância do `condicao_pagamento`.** O caput diz "será paga {condicao_pagamento}". Se o valor vier como frase completa com verbo próprio (ex.: "No pagamento do sinal será pago 50%..."), **não concatene** — reescreva como complemento ("em duas parcelas: 50% no pagamento do sinal e 50% após a assinatura do contrato de financiamento") ou encerre o caput antes e abra período novo. Nunca produza "será paga No pagamento...".
+
+**Subitens de forma de recebimento (após a 6.1).** Agrupe os intermediadores por `destino` e gere subitens numerados em sequência (6.1.1, 6.1.2, ...), **apenas para os grupos existentes**:
+- destino "ville" ou "asaas" (um subitem para todos juntos): "A parcela de {lista de nomes} ser-lhes-á creditada mediante divisão automática de recebíveis (split) da cobrança bancária emitida para o pagamento da comissão, creditando-se a cada qual, na liquidação, o valor da respectiva parcela."
+- destino "fora_direto" (um subitem por intermediador): "A parcela de {nome}, {CNPJ/CPF}, ser-lhe-á paga mediante {SE forma inclui pix: 'PIX para a chave {pix.tipo} {pix.chave}'}{SE ambos: ' ou '}{SE forma inclui cc: 'transferência para o banco {conta.banco}, agência {conta.agencia}, conta {corrente|poupança} nº {conta.conta}-{conta.digito}, de titularidade de {conta.titular}, {conta.documento}'}." Dado ausente → `[a completar: dados de recebimento de {nome}]` + pendência.
+- destino "fora_split_proprio" (um subitem por intermediador): "A parcela de {nome}, {CNPJ/CPF}, ser-lhe-á paga de forma apartada, cabendo-lhe exclusivamente eventual rateio com os profissionais a ele vinculados, sem responsabilidade dos demais intermediadores."
+
+`destino` ausente → trate como "asaas" e registre alerta "destino não informado para {nome}". **Nunca invente forma de pagamento.**
+
+**PROIBIÇÃO ESPECÍFICA.** Não afirme que o crédito ocorre "sem trânsito por conta de terceiro", "diretamente da fonte pagadora" ou equivalente: no split a liquidação passa pela conta emissora antes da divisão. Afirme apenas que cada intermediador é credor direto da sua parcela e que o split credita a cada um na liquidação.
+
+**Conferência.** A soma das parcelas deve ser **igual** ao valor total da comissão. Havendo divergência, reproduza os valores como vieram, **não ajuste**, e registre em `alertas`: "soma do split (R$ X) diverge do total da comissão (R$ Y) em R$ Z".
 
 ### §4.6 Assinaturas
-Gere um bloco de assinatura para: a PARTE VENDEDORA (e cônjuge, se exigida outorga — §4.3); a PARTE COMPRADORA (e cônjuge, conforme os FATOS); **cada** intermediador presente em `fatos.comissao.split` (nome + CNPJ/CPF + CRECI); e duas testemunhas (linhas em branco com Nome/CPF a completar). Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
+Gere um bloco de assinatura para: **cada** pessoa do polo vendedor; **cada** pessoa do polo comprador; **cada** intermediador presente em `fatos.comissao.split` (nome + CNPJ/CPF + CRECI); e duas testemunhas (linhas em branco com Nome/CPF a completar). O rótulo do papel segue o §4.3: cônjuge que integra o polo assina como **PARTE VENDEDORA** ou **PARTE COMPRADORA**; só use "Cônjuge anuente (outorga conjugal)" quando o bem for particular do outro. Todos os partícipes da comissão são rotulados **Intermediador**/**Intermediadora** — sem distinção entre a Ville Jardins e os demais. Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
 
 ## §5 ARITMÉTICA
 Você **não** é a fonte da conta — o código confere depois. No campo `numeros`, reporte preço, parcelas, comissão total, percentual e split exatamente como aparecem no documento. Garanta internamente que a soma das parcelas é igual ao preço e que a soma do split é igual à comissão total; se os FATOS forem inconsistentes, **não ajuste**: reproduza o que veio e adicione um item em `alertas` descrevendo a divergência. Gere o "por extenso" dos valores com cuidado (em reais).
