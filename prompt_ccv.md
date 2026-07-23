@@ -71,7 +71,7 @@ A posse do imóvel será entregue à PARTE COMPRADORA, livre de pessoas e objeto
 
 {cláusula da comissão — ver §4.5}
 
-**6.1. **A parcela devida a cada intermediador ser-lhe-á creditada diretamente, na forma dos subitens abaixo. Cada intermediador responde pelos respectivos aspectos fiscais e tributários da parcela que lhe cabe, inclusive pela emissão de Nota Fiscal de Serviço, Recibo Simples ou Recibo de Pagamento Autônomo, sem solidariedade entre eles. {subitens de forma de recebimento — ver §4.5}
+**6.1. **Cada intermediador é credor direto da parcela que lhe cabe e responde pelos respectivos aspectos fiscais e tributários, inclusive pela emissão de Nota Fiscal de Serviço, Recibo Simples ou Recibo de Pagamento Autônomo, sem solidariedade entre eles.
 
 **7. Da Irretratabilidade e das Cominações**
 
@@ -150,24 +150,37 @@ Liste **exatamente** as certidões em aberto recebidas em `fatos.certidoes_pende
 
 ### §4.5 Item 6 — comissão e split
 
-**Todos os partícipes são intermediadores.** Ville Jardins, corretores autônomos e imobiliárias parceiras figuram em pé de igualdade: cada um prestou serviço de intermediação, é **credor direto** da sua parcela perante a fonte pagadora e emite o próprio documento fiscal. **É PROIBIDO** redigir qualquer trecho que descreva um intermediador recebendo o valor integral e repassando aos demais, ou que trate a Ville Jardins como "a intermediadora" em oposição aos outros. No caput, use "tendo como intermediadores e credores".
+**Todos os partícipes são intermediadores.** Ville Jardins, corretores autônomos e imobiliárias parceiras figuram em pé de igualdade: cada um prestou serviço de intermediação, é **credor direto** da sua parcela e emite o próprio documento fiscal. **É PROIBIDO** redigir trecho que descreva um intermediador recebendo o valor integral e repassando aos demais, ou que trate a Ville Jardins como "a intermediadora" em oposição aos outros.
 
-**Caput.** Preencha dos FATOS: valor total, percentual, `condicao_pagamento` e o trecho do pagador. Liste cada intermediador com nome, CNPJ/CPF, CRECI e valor (algarismo + extenso). Campo faltante → `[a completar]` + pendência.
+**Estrutura do Item 6 — três blocos, nesta ordem:**
 
-**Trecho do pagador** (`comissao.pagador`): comprador → "por conta e ordem da PARTE VENDEDORA", com abatimento da alínea indicada do Item 3; vendedor → "paga diretamente pela PARTE VENDEDORA", sem conta e ordem e sem abatimento; ausente → `[a completar: responsável pelo pagamento da comissão (comprador ou vendedor) e, se comprador, a alínea do Item 3 da qual será abatida]` + pendência.
+**(a) Caput**, redação fixa:
+"A título de comissão de corretagem pela intermediação do presente negócio, é devida a quantia total de R$ {total} ({extenso}), correspondente a {percentual}% ({extenso}) sobre o valor da transação, tendo como intermediadores e credores:"
 
-**Concordância do `condicao_pagamento`.** O caput diz "será paga {condicao_pagamento}". Se o valor vier como frase completa com verbo próprio (ex.: "No pagamento do sinal será pago 50%..."), **não concatene** — reescreva como complemento ("em duas parcelas: 50% no pagamento do sinal e 50% após a assinatura do contrato de financiamento") ou encerre o caput antes e abra período novo. Nunca produza "será paga No pagamento...".
+**(b) Lista numerada em romanos minúsculos (i, ii, iii, iv, v)** — um item por intermediador, contendo nome, CNPJ/CPF, CRECI, valor (algarismo + extenso) **e a forma de recebimento**, nesta ordem:
 
-**Subitens de forma de recebimento (após a 6.1).** Agrupe os intermediadores por `destino` e gere subitens numerados em sequência (6.1.1, 6.1.2, ...), **apenas para os grupos existentes**:
-- destino "ville" ou "asaas" (um subitem para todos juntos): "A parcela de {lista de nomes} ser-lhes-á creditada mediante divisão automática de recebíveis (split) da cobrança bancária emitida para o pagamento da comissão, creditando-se a cada qual, na liquidação, o valor da respectiva parcela."
-- destino "fora_direto" (um subitem por intermediador): "A parcela de {nome}, {CNPJ/CPF}, ser-lhe-á paga mediante {SE forma inclui pix: 'PIX para a chave {pix.tipo} {pix.chave}'}{SE ambos: ' ou '}{SE forma inclui cc: 'transferência para o banco {conta.banco}, agência {conta.agencia}, conta {corrente|poupança} nº {conta.conta}-{conta.digito}, de titularidade de {conta.titular}, {conta.documento}'}." Dado ausente → `[a completar: dados de recebimento de {nome}]` + pendência.
-- destino "fora_split_proprio" (um subitem por intermediador): "A parcela de {nome}, {CNPJ/CPF}, ser-lhe-á paga de forma apartada, cabendo-lhe exclusivamente eventual rateio com os profissionais a ele vinculados, sem responsabilidade dos demais intermediadores."
+"{NOME}, {CNPJ nº X | CPF nº X}, CRECI {creci}, no valor de R$ {valor} ({extenso}), {FORMA};"
 
-`destino` ausente → trate como "asaas" e registre alerta "destino não informado para {nome}". **Nunca invente forma de pagamento.**
+O trecho {FORMA} sai do `destino` de cada intermediador:
+- "ville" ou "asaas" → "mediante divisão automática de recebíveis (split) da cobrança bancária emitida para o pagamento da comissão"
+- "fora_direto" → "mediante {SE pix: 'PIX para a chave {pix.tipo} {pix.chave}'}{SE ambos: ' ou '}{SE cc: 'transferência para o banco {conta.banco}, agência {conta.agencia}, conta {corrente|poupança} nº {conta.conta}-{conta.digito}, de titularidade de {conta.titular}, {conta.documento}'}". Dado ausente → `[a completar: dados de recebimento de {nome}]` + pendência.
+- "fora_split_proprio" → "mediante pagamento apartado, cabendo-lhe exclusivamente eventual rateio com os profissionais a ele vinculados"
+- ausente → use a forma de "asaas" e registre alerta "destino não informado para {nome}".
 
-**PROIBIÇÃO ESPECÍFICA.** Não afirme que o crédito ocorre "sem trânsito por conta de terceiro", "diretamente da fonte pagadora" ou equivalente: no split a liquidação passa pela conta emissora antes da divisão. Afirme apenas que cada intermediador é credor direto da sua parcela e que o split credita a cada um na liquidação.
+Pontuação da lista: ";" ao fim de cada item; "; e" no penúltimo; "." no último.
 
-**Conferência.** A soma das parcelas deve ser **igual** ao valor total da comissão. Havendo divergência, reproduza os valores como vieram, **não ajuste**, e registre em `alertas`: "soma do split (R$ X) diverge do total da comissão (R$ Y) em R$ Z".
+**(c) Parágrafo final de condição e responsável pelo pagamento**, após a lista:
+- `pagador` = comprador → "A comissão será repassada pela PARTE COMPRADORA por conta e ordem da PARTE VENDEDORA, mediante abatimento das quantias que a esta caberiam, {condicao_pagamento}."
+- `pagador` = vendedor → "A comissão será paga diretamente pela PARTE VENDEDORA, {condicao_pagamento}."
+- ausente → `[a completar: responsável pelo pagamento da comissão (comprador ou vendedor) e, se comprador, a alínea do Item 3 da qual será abatida]` + pendência.
+
+Ao encaixar `condicao_pagamento`, ajuste a regência para que o período feche ("...em duas parcelas: 50% no pagamento do sinal e 50% na data da assinatura do contrato de financiamento bancário pelas partes."). Se o valor vier como frase completa com verbo próprio, **reescreva** como complemento — nunca produza "será paga No pagamento...".
+
+**PROIBIÇÃO ESPECÍFICA.** Não afirme que o crédito ocorre "sem trânsito por conta de terceiro" ou "diretamente da fonte pagadora": no split a liquidação passa pela conta emissora antes da divisão. Afirme apenas que cada um é credor direto da sua parcela.
+
+**Formatação de documentos.** CNPJ sempre com máscara (00.000.000/0000-00); CPF idem. CRECI em maiúsculas com sufixo quando houver (30116-J, 113239-F). Campo faltante → `[a completar]` + pendência.
+
+**Conferência.** A soma das parcelas deve ser **igual** ao total da comissão. Havendo divergência, reproduza os valores como vieram, **não ajuste**, e registre em `alertas`: "soma do split (R$ X) diverge do total da comissão (R$ Y) em R$ Z".
 
 ### §4.6 Assinaturas
 Gere um bloco de assinatura para: **cada** pessoa do polo vendedor; **cada** pessoa do polo comprador; **cada** intermediador presente em `fatos.comissao.split` (nome + CNPJ/CPF + CRECI); e duas testemunhas (linhas em branco com Nome/CPF a completar). O rótulo do papel segue o §4.3: cônjuge que integra o polo assina como **PARTE VENDEDORA** ou **PARTE COMPRADORA**; só use "Cônjuge anuente (outorga conjugal)" quando o bem for particular do outro. Todos os partícipes da comissão são rotulados **Intermediador**/**Intermediadora** — sem distinção entre a Ville Jardins e os demais. Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
