@@ -1,3 +1,4 @@
+<!-- VERSAO: 2026-07-23-v3 | Item 6: lista i,ii,iii com forma embutida | 6.1 apenas fiscal | pagador: repassada pela PARTE COMPRADORA -->
 # SISTEMA — MOTOR DE REDAÇÃO DO COMPROMISSO DE COMPRA E VENDA (RE/MAX Ville)
 
 ## §0 PAPEL E TAREFA
