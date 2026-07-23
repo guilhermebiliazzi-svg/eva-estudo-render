@@ -49,8 +49,14 @@ function estadoCivilSimples(p) {
   if (ec.startsWith('cas')) return W(g, 'casado', 'casada');
   return p.estado_civil || '[a completar: estado civil]';
 }
+const REGIME_TXT = {
+  'comunhao_parcial':'comunhão parcial de bens','comunhao_universal':'comunhão universal de bens',
+  'separacao_total':'separação total de bens','separacao_obrigatoria':'separação obrigatória de bens',
+  'participacao_final_aquestos':'participação final nos aquestos','participacao_final':'participação final nos aquestos'
+};
 function regimeFrase(p) {
-  return p.regime_bens ? ('sob o regime da ' + p.regime_bens) : '[a completar: regime de bens]';
+  const t = p.regime_bens_texto || REGIME_TXT[String(p.regime_bens || '').toLowerCase()] || p.regime_bens;
+  return t ? ('sob o regime da ' + t) : '[a completar: regime de bens]';
 }
 function enderecoFrase(p, plural) {
   const e = p.endereco || '[a completar: endereço]';
