@@ -30,9 +30,34 @@ function corpoToHtml(md) {
     const b = raw.trim();
     if (!b) continue;
 
-    // Linha de assinatura (sublinhados)
+    // Linha de assinatura (sublinhados) — sozinha no bloco
     if (/^_{5,}$/.test(b)) {
       out.push('<div class="sig"></div>');
+      continue;
+    }
+
+    // Bloco de assinatura completo: linha de sublinhados + nome + cargo (quebras simples).
+    // O motor às vezes emite tudo junto; aqui desmontamos para o layout correto.
+    if (/^\s*(?:\d+\)\s*)?_{5,}\s*(?:\n|$)/.test(b) && b.indexOf("\n") !== -1) {
+      const linhas = b.split("\n").map(x => x.trim()).filter(Boolean);
+      out.push('<div class="sigblock">');
+      out.push('<div class="sig"></div>');
+      for (let k = 1; k < linhas.length; k++) {
+        const L = linhas[k].replace(/^\*\*|\*\*$/g, "");
+        const ehPapel = /^(Testemunha|Nome:|PARTE |Intermediador|Cônjuge)/i.test(L) || /Nome:\s*/.test(L);
+        out.push('<p class="' + (k === 1 && !ehPapel ? "signame" : "sigrole") + '">' + inline(esc(L)) + "</p>");
+      }
+      out.push("</div>");
+      continue;
+    }
+
+    // Assinatura de testemunha em linha única: "______ Testemunha 1 — Nome: ... — CPF: ..."
+    const mTest = b.match(/^\s*(?:\d+\)\s*)?_{5,}\s+(.+)$/s);
+    if (mTest) {
+      out.push('<div class="sigblock">');
+      out.push('<div class="sig"></div>');
+      out.push('<p class="sigrole">' + inline(esc(mTest[1].replace(/\n/g, " ").trim())) + "</p>");
+      out.push("</div>");
       continue;
     }
 
@@ -82,7 +107,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .pad p{margin:0 0 11px;text-align:justify;text-justify:inter-word}
 .pad p strong{color:var(--ink)}
 .sig{height:0;border-top:1px solid #111;width:62%;margin:26px 0 4px}
-.signame{text-align:left;font-weight:700;margin:0 0 2px}
+.signame{text-align:left;font-weight:700;margin:0 0 1px;text-transform:none}
+.sigrole{text-align:left;margin:0 0 2px;font-size:13.5px;color:var(--muted)}
+.sigblock{margin:0 0 22px;break-inside:avoid;page-break-inside:avoid}
+.sigblock p{text-align:left !important;text-justify:auto !important;margin:0 0 2px}
 @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none}}
 `;
 
