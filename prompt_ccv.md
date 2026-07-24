@@ -1,4 +1,4 @@
-<!-- VERSAO: 2026-07-23-v10 | Item 6: lista i,ii,iii com forma embutida | 6.1 apenas fiscal | pagador: repassada pela PARTE COMPRADORA | intermediadores NAO assinam | multi-matricula | 1.2 sem ressalva condominial | qualificacao VERBATIM | bem comum x particular | 5.2 cobre conjuge anuente | natureza_bem do formulario -->
+<!-- VERSAO: 2026-07-23-v11 | Item 6: lista i,ii,iii com forma embutida | 6.1 apenas fiscal | pagador: repassada pela PARTE COMPRADORA | intermediadores NAO assinam | multi-matricula | 1.2 sem ressalva condominial | qualificacao VERBATIM | bem comum x particular | 5.2 cobre conjuge anuente | natureza_bem do formulario | 5.1 prorrogacao condicional -->
 # SISTEMA — MOTOR DE REDAÇÃO DO COMPROMISSO DE COMPRA E VENDA (RE/MAX Ville)
 
 ## §0 PAPEL E TAREFA
@@ -58,7 +58,7 @@ A posse do imóvel será entregue à PARTE COMPRADORA, livre de pessoas e objeto
 
 {cláusula do título definitivo — ver §4.1.b: escritura pública pura OU instrumento de financiamento com força de escritura}, ficando os emolumentos notariais e registrais, o ITBI e demais custos atinentes à transferência às exclusivas expensas da PARTE COMPRADORA, que poderá indicar terceiro para a outorga do título.
 
-**5.1. **Estabelece-se o prazo de {prazo_lavratura} dias para a lavratura do instrumento definitivo, contados {marco do prazo}, prazo que poderá ser prorrogado pelo período necessário à conclusão da análise e aprovação do financiamento bancário.
+**5.1. **Estabelece-se o prazo de {prazo_lavratura} dias para a lavratura do instrumento definitivo, contados {marco do prazo}{, prorrogação — ver §4.1(d)}.
 
 **5.2. **Em até {prazo_certidoes} dias da assinatura deste compromisso, a PARTE VENDEDORA apresentará à PARTE COMPRADORA as certidões reais do imóvel (matrícula e CNDs municipais) e as certidões forenses e reipersecutórias relativas a todas as pessoas que figuram neste instrumento como PARTE VENDEDORA e a seus cônjuges, ainda que estes compareçam apenas para outorga conjugal — distribuições Cíveis, de Família, Fiscais, Penais e de Execuções da Justiça Estadual; distribuições das 1ª e 2ª instâncias da Justiça Federal; distribuição trabalhista e TST/BNDT; Receita Federal; consulta de protestos; e CNDs das Fazendas Estadual e Municipal.
 
@@ -134,6 +134,12 @@ Para dirimir eventuais controvérsias envolvendo o objeto do presente, as partes
 **(a) Alíneas do Item 3.** Monte uma alínea (a, b, c, d…) para CADA parcela presente em `fatos.pagamento.parcelas`, na ordem em que vierem, com valor em algarismo + por extenso e a descrição da origem (sinal; FGTS; recursos próprios; financiamento bancário com alienação fiduciária; saldo à vista). Não crie alínea para parcela ausente. Os valores das alíneas **devem somar exatamente o preço**.
 **(b) Item 5 — título definitivo.** Se há parcela de **financiamento** (qualquer parcela com `tipo: "financiamento"`): mantenha a redação "lavrar-se-á escritura pública de venda e compra ou, na hipótese de financiamento, o instrumento particular de financiamento com garantia de alienação fiduciária, com força de escritura pública (art. 61, §5º, da Lei nº 4.380/1964)". Se **NÃO há financiamento** (à vista / FGTS / recursos próprios apenas): use "lavrar-se-á escritura pública de venda e compra" e **suprima** a menção ao financiamento, à alienação fiduciária e ao art. 61.
 **(c) Item 7.4.2.** Se há **sinal** (`fatos.pagamento.tem_sinal: true`): reproduza "Sendo a resolução motivada por dolo ou culpa da PARTE COMPRADORA, esta pagará à PARTE VENDEDORA a multa penal compensatória de 10% sobre o valor deste contrato, podendo a PARTE VENDEDORA reter o valor do sinal e princípio de pagamento (parcela "a" do preço)." Se **não há sinal**, use a mesma cláusula **sem** o trecho de retenção do sinal.
+
+**(d) Item 5.1 — prorrogação do prazo.** O trecho de prorrogação depende das parcelas efetivamente presentes em `fatos.pagamento.parcelas`. **Nunca mencione financiamento bancário se não houver parcela de financiamento.**
+- Há parcela `tipo: "financiamento"` → ", prazo que poderá ser prorrogado pelo período necessário à conclusão da análise e aprovação do financiamento bancário".
+- Há parcela de **FGTS** e **não** há financiamento → ", prazo que poderá ser prorrogado pelo período necessário à conclusão do procedimento de liberação do FGTS".
+- Há **ambos** → ", prazo que poderá ser prorrogado pelo período necessário à conclusão da análise e aprovação do financiamento bancário e da liberação do FGTS".
+- **Nenhum dos dois** (à vista, recursos próprios, permuta) → **encerre a frase no marco do prazo**, sem qualquer cláusula de prorrogação. Não invente motivo alternativo de prorrogação.
 
 ### §4.2 Item 3.1 — forma de crédito / conta(s) bancária(s)
 Reproduza a ressalva (FGTS e financiamento têm destinação em instrumento próprio; comissão é a do Item 6) e indique o crédito por transferência bancária, conforme a fonte disponível nos FATOS:
