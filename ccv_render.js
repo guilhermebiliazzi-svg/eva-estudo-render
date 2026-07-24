@@ -36,6 +36,19 @@ function corpoToHtml(md) {
       continue;
     }
 
+    // Cabeçalho de grupo de assinatura (PARTE VENDEDORA/COMPRADORA, ANUENTES, Testemunhas)
+    const mSigHdr = b.match(/^\*\*\s*(PARTE VENDEDORA|PARTE COMPRADORA|ANUENTES[^*]*|Testemunhas:?)\s*\*\*$/i);
+    if (mSigHdr) {
+      out.push('<p class="sighdr">' + esc(mSigHdr[1].trim()) + "</p>");
+      continue;
+    }
+
+    // Linha de documento de assinatura (CPF/Nome) — sozinha no bloco, empilhada
+    if (/^(CPF nº|CPF:|Nome:)/i.test(b)) {
+      out.push('<p class="sigrole">' + inline(b) + "</p>");
+      continue;
+    }
+
     // Bloco de assinatura completo: linha de sublinhados + nome + cargo (quebras simples).
     // O motor às vezes emite tudo junto; aqui desmontamos para o layout correto.
     if (/^\s*(?:\d+\)\s*)?_{5,}\s*(?:\n|$)/.test(b) && b.indexOf("\n") !== -1) {
@@ -121,6 +134,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .pad p{margin:0 0 11px;text-align:justify;text-justify:inter-word}
 .pad p strong{color:var(--ink)}
 .sig{height:0;border-top:1px solid #111;width:62%;margin:26px 0 4px}
+.sighdr{text-align:left;font-weight:700;color:var(--navy);margin:22px 0 6px;font-size:13px;letter-spacing:.4px;text-transform:uppercase}
 .signame{text-align:left;font-weight:700;margin:0 0 1px;text-transform:none}
 .sigrole{text-align:left;margin:0 0 2px;font-size:13.5px;color:var(--muted)}
 .sigblock{margin:0 0 22px;break-inside:avoid;page-break-inside:avoid}
