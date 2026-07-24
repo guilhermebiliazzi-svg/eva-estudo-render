@@ -40,6 +40,8 @@ A PARTE VENDEDORA se compromete a vender à PARTE COMPRADORA, que se compromete 
 
 **2.2. **Quaisquer débitos e responsabilidades relacionados ao imóvel são obrigações exclusivas da PARTE VENDEDORA até a data da entrega da posse à PARTE COMPRADORA, que, constatando pendências de fatos geradores anteriores, poderá quitá-las diretamente e cobrá-las da PARTE VENDEDORA (direito de regresso), ou descontar do preço.
 
+**2.3. **Durante a vigência deste compromisso, a PARTE VENDEDORA obriga-se a não alienar, prometer à venda, ceder, gravar ou onerar o imóvel, no todo ou em parte, a terceiros, nem praticar ato que comprometa a transmissão ora ajustada, sob pena das cominações do Item 7.
+
 **3. Do Preço**
 
 O preço ajustado para a presente transação é de R$ {preço} ({preço por extenso}), que serão pagos da seguinte forma:
@@ -67,6 +69,10 @@ A posse do imóvel será entregue à PARTE COMPRADORA, livre de pessoas e objeto
 **5.3. **{cláusula de certidões pendentes — ver §4.4}
 
 **5.3.1. **A não entrega no prazo estipulado, ou a constatação de pendência capaz de gerar risco eviccional não sanada pela PARTE VENDEDORA, faculta à PARTE COMPRADORA a rescisão na forma do item 5.2.1, sem prejuízo das cominações do Item 7.
+
+**5.4. **{condição da composição financeira — ver §4.7; SUPRIMA este item se não há parcela de financiamento nem de FGTS}
+
+**5.4.1. **{responsabilidade pelo crédito/FGTS e diligência da compradora — ver §4.7; SUPRIMA junto com o 5.4}
 
 **6. Da Comissão**
 
@@ -222,6 +228,21 @@ Ao encaixar `condicao_pagamento`, ajuste a regência para que o período feche (
 Gere um bloco de assinatura APENAS para: **cada** pessoa do polo vendedor; **cada** pessoa do polo comprador; e duas testemunhas (linhas em branco com Nome/CPF a completar). O rótulo do papel segue o §4.3: cônjuge que integra o polo assina como **PARTE VENDEDORA** ou **PARTE COMPRADORA**; só use "Cônjuge anuente (outorga conjugal)" quando o bem for particular do outro. Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
 
 **É PROIBIDO gerar bloco de assinatura para intermediadores.** Os intermediadores figuram exclusivamente no Item 6, como credores da comissão; não assinam o instrumento e não aparecem entre os signatários, ainda que constem do `fatos.comissao.split`.
+
+### §4.7 Itens 5.4 e 5.4.1 — condição da composição financeira (CONDICIONAL)
+Estes itens só existem quando o pagamento depende de aprovação externa. Verifique `fatos.pagamento.parcelas`:
+
+- **Nenhuma parcela `tipo: "financiamento"` nem `tipo: "fgts"`** (negócio à vista, recursos próprios, permuta) → **NÃO gere** os itens 5.4 e 5.4.1; passe direto de 5.3.1 para o Item 6. Não há composição financeira a condicionar.
+
+- **Há financiamento e/ou FGTS** → gere o **5.4** neste molde fixo, encaixando `{CONDIÇÃO}` e `{CAUSAS}` conforme as parcelas: "A eficácia deste compromisso fica condicionada {CONDIÇÃO}. Frustrada tal condição por motivo não imputável à PARTE COMPRADORA — {CAUSAS} —, poderá esta, à sua opção: (i) complementar os recursos com meios próprios, se viável, prosseguindo o negócio; ou (ii) resolver o presente compromisso, sem incidência de qualquer multa ou penalidade, com a restituição, em até 5 (cinco) dias, da integralidade das quantias por ela pagas a título de preço, atualizadas pelo IGP-M/FGV, retornando o negócio ao status quo ante."
+  - Só **financiamento** (sem FGTS): CONDIÇÃO = "à avaliação do imóvel, pelo agente financeiro, em valor compatível com a operação"; CAUSAS = "avaliação do imóvel em valor que inviabilize a operação".
+  - Só **FGTS** (sem financiamento): CONDIÇÃO = "à avaliação do imóvel e à liberação dos recursos do FGTS da PARTE COMPRADORA"; CAUSAS = "avaliação do imóvel em valor que inviabilize a operação ou não liberação do FGTS por causa alheia à PARTE COMPRADORA".
+  - **Ambos**: CONDIÇÃO = "à avaliação do imóvel, pelo agente financeiro, em valor compatível com a operação, e à liberação dos recursos do FGTS da PARTE COMPRADORA"; CAUSAS = as duas acima unidas por "ou".
+  - **NUNCA** inclua comissão de corretagem na restituição do 5.4: restitui-se apenas o que foi pago a título de preço.
+
+- Gere o **5.4.1** conforme as parcelas:
+  - Há **financiamento** (com ou sem FGTS): "A obtenção e a aprovação do crédito bancário constituem responsabilidade exclusiva da PARTE COMPRADORA. A negativa de financiamento decorrente de seu perfil de crédito, renda, capacidade de endividamento ou restrições cadastrais em seu nome não autoriza a resolução sem multa, sujeitando-se às cominações do Item 7. A PARTE COMPRADORA obriga-se a dar entrada no pedido de financiamento em até 10 (dez) dias da assinatura, apresentando tempestivamente a documentação exigida pelo agente financeiro." Se **também há FGTS**, acrescente ao final: " Igualmente, a não liberação do FGTS por não atendimento, pela PARTE COMPRADORA, dos requisitos do respectivo programa não autoriza a resolução sem multa."
+  - Só **FGTS** (sem financiamento): "A não liberação do FGTS por não atendimento, pela PARTE COMPRADORA, dos requisitos do respectivo programa não autoriza a resolução sem multa, sujeitando-se às cominações do Item 7. A PARTE COMPRADORA obriga-se a requerer a liberação dos recursos do FGTS em até 10 (dez) dias da assinatura, apresentando tempestivamente a documentação exigida pelo agente operador."
 
 ## §5 ARITMÉTICA
 Você **não** é a fonte da conta — o código confere depois. No campo `numeros`, reporte preço, parcelas, comissão total, percentual e split exatamente como aparecem no documento. Garanta internamente que a soma das parcelas é igual ao preço e que a soma do split é igual à comissão total; se os FATOS forem inconsistentes, **não ajuste**: reproduza o que veio e adicione um item em `alertas` descrevendo a divergência. Gere o "por extenso" dos valores com cuidado (em reais).
