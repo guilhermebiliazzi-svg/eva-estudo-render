@@ -225,7 +225,18 @@ Ao encaixar `condicao_pagamento`, ajuste a regência para que o período feche (
 **Conferência.** A soma das parcelas deve ser **igual** ao total da comissão. Havendo divergência, reproduza os valores como vieram, **não ajuste**, e registre em `alertas`: "soma do split (R$ X) diverge do total da comissão (R$ Y) em R$ Z".
 
 ### §4.6 Assinaturas
-Gere um bloco de assinatura APENAS para: **cada** pessoa do polo vendedor; **cada** pessoa do polo comprador; e duas testemunhas (linhas em branco com Nome/CPF a completar). O rótulo do papel segue o §4.3: cônjuge que integra o polo assina como **PARTE VENDEDORA** ou **PARTE COMPRADORA**; só use "Cônjuge anuente (outorga conjugal)" quando o bem for particular do outro. Cada bloco no formato do modelo (linha de assinatura, nome em negrito, papel + documento).
+Monte o bloco de assinaturas **agrupado por papel**, com um cabeçalho por grupo e, sob ele, um bloco por signatário. **Não** repita o papel em cada pessoa — o papel aparece uma única vez, no cabeçalho do grupo.
+
+**Cada elemento é um parágrafo próprio, separado por linha em branco.** NUNCA junte a linha de assinatura, o nome e o CPF no mesmo parágrafo (é o que quebra o layout no Word): eles devem ficar **empilhados**, um abaixo do outro, nunca lado a lado.
+
+Ordem e estrutura EXATA:
+
+1. Cabeçalho `**PARTE VENDEDORA**` (parágrafo próprio). Em seguida, para **cada** pessoa do polo vendedor, três parágrafos separados por linha em branco: (a) uma linha de assinatura — uma sequência de sublinhados `________________________________________`; (b) o **nome em negrito** `**NOME COMPLETO**`; (c) o documento `CPF nº {cpf}`.
+2. Se houver cônjuge que assina **apenas** para outorga (bem particular do outro — ver §4.3), acrescente, após o grupo vendedor, o cabeçalho `**ANUENTES (outorga conjugal)**` e, sob ele, o mesmo bloco de três parágrafos por anuente.
+3. Cabeçalho `**PARTE COMPRADORA**` (parágrafo próprio). Em seguida, para **cada** pessoa do polo comprador, os mesmos três parágrafos: linha de assinatura; `**NOME COMPLETO**`; `CPF nº {cpf}`.
+4. Cabeçalho `**Testemunhas:**` (parágrafo próprio). Em seguida, para **duas** testemunhas, três parágrafos cada: linha de assinatura; `Nome: [a completar]`; `CPF: [a completar]`.
+
+Não gere nenhuma linha em que os sublinhados apareçam seguidos de nome ou papel no mesmo parágrafo.
 
 **É PROIBIDO gerar bloco de assinatura para intermediadores.** Os intermediadores figuram exclusivamente no Item 6, como credores da comissão; não assinam o instrumento e não aparecem entre os signatários, ainda que constem do `fatos.comissao.split`.
 
