@@ -51,12 +51,26 @@ function corpoToHtml(md) {
       continue;
     }
 
-    // Assinatura de testemunha em linha única: "______ Testemunha 1 — Nome: ... — CPF: ..."
-    const mTest = b.match(/^\s*(?:\d+\)\s*)?_{5,}\s+(.+)$/s);
+    // Assinatura com sublinhados e conteúdo na MESMA linha:
+    //   "______ **NOME**\nPARTE VENDEDORA — CPF nº ..."  ou  "______ Testemunha 1 — Nome: ..."
+    const mTest = b.match(/^\s*(?:\d+\)\s*)?_{5,}[ \t]*(.+)$/s);
     if (mTest) {
+      const linhas = mTest[1].split("\n").map(x => x.trim()).filter(Boolean);
       out.push('<div class="sigblock">');
       out.push('<div class="sig"></div>');
-      out.push('<p class="sigrole">' + inline(esc(mTest[1].replace(/\n/g, " ").trim())) + "</p>");
+      for (let k = 0; k < linhas.length; k++) {
+        const bruto = linhas[k];
+        // "**NOME** resto"  ->  nome em negrito + papel na linha seguinte
+        const mNome = (k === 0) ? bruto.match(/^\*\*(.+?)\*\*[ \t]*(.*)$/) : null;
+        if (mNome) {
+          out.push('<p class="signame">' + inline(esc(mNome[1].trim())) + "</p>");
+          if (mNome[2] && mNome[2].trim()) {
+            out.push('<p class="sigrole">' + inline(esc(mNome[2].trim())) + "</p>");
+          }
+          continue;
+        }
+        out.push('<p class="sigrole">' + inline(esc(bruto.replace(/\*\*/g, ""))) + "</p>");
+      }
       out.push("</div>");
       continue;
     }
