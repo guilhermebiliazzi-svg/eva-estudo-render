@@ -441,13 +441,30 @@ async function listarSoapActions() {
 /* Leitura do retorno                                                  */
 /* ------------------------------------------------------------------ */
 
+// O nome da tag precisa terminar no ">" ou num espaço. Sem isto,
+// "<Numero>" casa a abertura de "<NumeroNFe>" e o fechamento nunca bate —
+// foi o que fez a conciliação concluir que a nota 187 não existia.
 const pegar = (xml, tag) => {
-  const m = xml.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`, "i"));
+  const m = xml.match(
+    new RegExp(`<(?:\\w+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${tag}>`, "i")
+  );
   return m ? m[1].trim() : null;
 };
 
+/** Primeiro valor não nulo entre várias tags candidatas. */
+const pegarQualquer = (xml, tags) => {
+  for (const t of tags) {
+    const v = pegar(xml, t);
+    if (v != null && v !== "") return v;
+  }
+  return null;
+};
+
 const pegarTodos = (xml, tag) => {
-  const re = new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`, "gi");
+  const re = new RegExp(
+    `<(?:\\w+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${tag}>`,
+    "gi"
+  );
   const out = [];
   let m;
   while ((m = re.exec(xml))) out.push(m[1]);
@@ -476,7 +493,7 @@ function interpretarRetorno(corpo) {
   }));
 
   const chave = pegarTodos(interno, "ChaveNFe")[0] || "";
-  const numeroNota = chave ? pegar(chave, "Numero") : null;
+  const numeroNota = chave ? pegarQualquer(chave, ["NumeroNFe", "Numero"]) : null;
   const codigoVerificacao = chave ? pegar(chave, "CodigoVerificacao") : null;
 
   return { sucesso, erros, alertas, numeroNota, codigoVerificacao, xml: interno };
@@ -546,7 +563,7 @@ async function consultarPorRPS(chaves) {
     return {
       serie: chaveRPS ? pegar(chaveRPS, "SerieRPS") : null,
       numeroRps: chaveRPS ? pegar(chaveRPS, "NumeroRPS") : null,
-      numeroNota: chaveNFe ? pegar(chaveNFe, "Numero") : null,
+      numeroNota: chaveNFe ? pegarQualquer(chaveNFe, ["NumeroNFe", "Numero"]) : null,
       codigoVerificacao: chaveNFe ? pegar(chaveNFe, "CodigoVerificacao") : null,
       dataEmissao: pegar(bloco, "DataEmissaoNFe"),
       status: pegar(bloco, "StatusNFe"),   // N = normal, C = cancelada
