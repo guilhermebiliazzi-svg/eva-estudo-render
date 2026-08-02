@@ -508,12 +508,15 @@ async function emitirNFSe(dados, opcoes = {}) {
     numero: dados.numero,
     dataEmissao: dados.dataEmissao,
     status: "N",              // Normal
-    tributacao: "T",          // Tributado em São Paulo
-    issRetido: false,
     valorServicos: dados.valorServicos,
     valorDeducoes: 0,
-    codigoServico: process.env.NFSE_SP_CODIGO_SERV || "03212",
-    aliquota: Number(process.env.NFSE_SP_ALIQUOTA || 0.05),
+    // Por emissão: administração de locação usa 03212; comissão de
+    // intermediação usa outro código. Serviços distintos não compartilham
+    // código de serviço (erro 222). O env é só o padrão.
+    codigoServico: dados.codigoServico || process.env.NFSE_SP_CODIGO_SERV || "03212",
+    aliquota: Number(dados.aliquota || process.env.NFSE_SP_ALIQUOTA || 0.05),
+    tributacao: dados.tributacao || "T",   // T = tributado em São Paulo
+    issRetido: dados.issRetido === true,
     tomadorDoc: dados.tomadorDoc,
     tomadorNome: dados.tomadorNome,
     tomadorEmail: dados.tomadorEmail,
