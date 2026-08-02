@@ -26,6 +26,28 @@ const WS_HOST = "nfews.prefeitura.sp.gov.br";
 const WS_PATH = "/lotenfe.asmx";
 const NS = "http://www.prefeitura.sp.gov.br/nfe";
 
+/**
+ * SOAPAction de cada operação, lidos do WSDL do próprio serviço
+ * (GET /lotenfe.asmx?WSDL, em 02/08/2026).
+ *
+ * Não são deriváveis do nome do método: o caminho é /nfe/ws/, a inicial é
+ * minúscula e o teste se chama "testeenvio". Deduzir do manual dá
+ * "Server did not recognize the value of HTTP Header SOAPAction".
+ * A rota GET /nfse-sp/wsdl relê essa lista se a Prefeitura mudar algo.
+ */
+const SOAP_ACTIONS = {
+  EnvioRPS:                "http://www.prefeitura.sp.gov.br/nfe/ws/envioRPS",
+  EnvioLoteRPS:            "http://www.prefeitura.sp.gov.br/nfe/ws/envioLoteRPS",
+  TesteEnvioLoteRPS:       "http://www.prefeitura.sp.gov.br/nfe/ws/testeenvio",
+  CancelamentoNFe:         "http://www.prefeitura.sp.gov.br/nfe/ws/cancelamentoNFe",
+  ConsultaNFe:             "http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFe",
+  ConsultaNFeRecebidas:    "http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeRecebidas",
+  ConsultaNFeEmitidas:     "http://www.prefeitura.sp.gov.br/nfe/ws/consultaNFeEmitidas",
+  ConsultaLote:            "http://www.prefeitura.sp.gov.br/nfe/ws/consultaLote",
+  ConsultaInformacoesLote: "http://www.prefeitura.sp.gov.br/nfe/ws/consultaInformacoesLote",
+  ConsultaCNPJ:            "http://www.prefeitura.sp.gov.br/nfe/ws/consultaCNPJ",
+};
+
 /* ------------------------------------------------------------------ */
 /* Certificado                                                         */
 /* ------------------------------------------------------------------ */
@@ -297,6 +319,18 @@ function chamarWs(metodo, mensagemXml) {
     `</soap:Body>` +
     `</soap:Envelope>`;
 
+  // override por env só para emergência (ex.: a Prefeitura mudar o WSDL
+  // fora de um deploy). Formato: "Metodo=url;Metodo2=url2".
+  let soapAction = SOAP_ACTIONS[metodo];
+  const override = process.env.NFSE_SP_SOAPACTIONS;
+  if (override) {
+    for (const par of override.split(";")) {
+      const [k, v] = par.split("=");
+      if (k && k.trim() === metodo && v) soapAction = v.trim();
+    }
+  }
+  if (!soapAction) throw new Error(`SOAPAction desconhecido para o método "${metodo}".`);
+
   const body = Buffer.from(envelope, "utf8");
   if (body.length > 500 * 1024) {
     throw new Error("Mensagem XML acima de 500 KB (erro 1101).");
@@ -309,7 +343,7 @@ function chamarWs(metodo, mensagemXml) {
     headers: {
       "Content-Type": "text/xml; charset=utf-8",
       "Content-Length": body.length,
-      SOAPAction: `${process.env.NFSE_SP_SOAPACTION_BASE || NS + "/"}${metodo}`,
+      SOAPAction: soapAction,
     },
     agent: new https.Agent({
       pfx: pfxBuffer,
@@ -535,6 +569,7 @@ function statusCertificado() {
 }
 
 module.exports = {
+  SOAP_ACTIONS,
   emitirNFSe,
   statusCertificado,
   listarSoapActions,
