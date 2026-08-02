@@ -31,7 +31,7 @@ const { gerarParecer } = require("./parecer");
 const { auditarCertidao } = require("./auditor_cnd");
 const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
-const { emitirNFSe, statusCertificado, listarSoapActions } = require("./nfse_sp");
+const { emitirNFSe, statusCertificado, listarSoapActions, consultarPorRPS } = require("./nfse_sp");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -80,6 +80,25 @@ app.get("/nfse-sp/wsdl", async (req, res) => {
   try {
     res.json(await listarSoapActions());
   } catch (e) {
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Conciliação: pergunta à Prefeitura se determinados RPS já viraram NF-e.
+// Recupera notas emitidas cujo desfecho não foi gravado no painel.
+// body: { chaves: [{ serie, numero }, ...] }  (até 50)
+app.post("/nfse-sp/consultar-rps", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const chaves = (req.body && req.body.chaves) || [];
+    if (!Array.isArray(chaves) || chaves.length === 0) {
+      return res.status(400).json({ error: "chaves (array de {serie, numero}) é obrigatório." });
+    }
+    const saida = await consultarPorRPS(chaves);
+    if (!req.body.debug) delete saida.xmlRetorno;
+    res.json(saida);
+  } catch (e) {
+    console.error("erro /nfse-sp/consultar-rps:", e);
     res.status(500).json({ error: String((e && e.message) || e) });
   }
 });
