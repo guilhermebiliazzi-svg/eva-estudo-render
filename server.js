@@ -31,6 +31,7 @@ const { gerarParecer } = require("./parecer");
 const { auditarCertidao } = require("./auditor_cnd");
 const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
+const { emitirNFSe, statusCertificado } = require("./nfse_sp");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -47,6 +48,82 @@ require("./recibo_repasse")(app, pool);  // executa na hora, sem guardar
 require("./serpro_cnd")(app);       // proxy SERPRO (contorno DNS n8n Cloud)
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// ===================================================================
+// NFS-e São Paulo — emissão da taxa de administração (layout 1, Simples)
+// ===================================================================
+
+// Guarda simples: se NFSE_SP_TOKEN estiver definida, exige o header.
+// Estas rotas geram documento fiscal — não devem ficar abertas.
+function exigirTokenNFSe(req, res) {
+  const esperado = process.env.NFSE_SP_TOKEN;
+  if (!esperado) return true; // sem token configurado, não bloqueia (mas configure)
+  const recebido = req.get("x-nfse-token");
+  if (recebido !== esperado) {
+    res.status(401).json({ error: "Token inválido." });
+    return false;
+  }
+  return true;
+}
+
+// Diagnóstico: o certificado carrega? até quando vale?
+// Não toca na Prefeitura — serve para validar as variáveis de ambiente.
+app.get("/nfse-sp/certificado", (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  res.json(statusCertificado());
+});
+
+// Emissão (ou teste) de uma NFS-e por requisição.
+// body: { serie, numero, dataEmissao, valorServicos, tomadorDoc, tomadorNome,
+//         tomadorEmail?, tomadorEndereco?, discriminacao, teste? }
+//
+// teste: true  → TesteEnvioLoteRPS: valida tudo na Prefeitura e NÃO gera nota.
+// teste: false → EnvioRPS: gera a nota de verdade.
+//
+// Uma nota por chamada, sempre. Sem lote: emissão fiscal em lote esconde
+// qual item falhou e deixa número de RPS em estado indefinido.
+app.post("/nfse-sp/emitir", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const b = req.body || {};
+    const faltando = ["serie", "numero", "dataEmissao", "valorServicos", "discriminacao"]
+      .filter((k) => b[k] === undefined || b[k] === null || b[k] === "");
+    if (faltando.length) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes: " + faltando.join(", ") });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.dataEmissao))) {
+      return res.status(400).json({ error: "dataEmissao deve ser AAAA-MM-DD." });
+    }
+    if (!(Number(b.valorServicos) > 0)) {
+      return res.status(400).json({ error: "valorServicos deve ser maior que zero (erro 303)." });
+    }
+
+    const saida = await emitirNFSe(
+      {
+        serie: b.serie,
+        numero: b.numero,
+        dataEmissao: b.dataEmissao,
+        valorServicos: Number(b.valorServicos),
+        tomadorDoc: b.tomadorDoc,
+        tomadorNome: b.tomadorNome,
+        tomadorEmail: b.tomadorEmail,
+        tomadorEndereco: b.tomadorEndereco,
+        discriminacao: b.discriminacao,
+      },
+      { teste: b.teste === true || b.teste === "true" }
+    );
+
+    // o XML só volta quando pedido — é grande e contém a assinatura
+    if (!b.debug) {
+      delete saida.xmlEnvio;
+      delete saida.xmlRetorno;
+    }
+    res.json(saida);
+  } catch (e) {
+    console.error("erro /nfse-sp/emitir:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
 
 // extrai 1 anúncio (Jina /json) -> objeto amostra
 app.post("/amostra", async (req, res) => {
