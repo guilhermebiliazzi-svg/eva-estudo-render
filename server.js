@@ -120,6 +120,12 @@ app.post("/nfse-sp/emitir", async (req, res) => {
         tomadorEmail: b.tomadorEmail,
         tomadorEndereco: b.tomadorEndereco,
         discriminacao: b.discriminacao,
+        // opcionais: administração usa 03212 (padrão); comissão de
+        // intermediação usa o próprio código, informado na chamada
+        codigoServico: b.codigoServico,
+        aliquota: b.aliquota,
+        tributacao: b.tributacao,
+        issRetido: b.issRetido,
       },
       { teste: b.teste === true || b.teste === "true" }
     );
