@@ -483,6 +483,81 @@ function interpretarRetorno(corpo) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Consulta por chave de RPS (conciliação)                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pergunta à Prefeitura se um RPS já virou NF-e.
+ *
+ * Existe porque a emissão pode ter sucesso lá e o registro falhar aqui
+ * (timeout, queda de rede, deploy no meio). Como o número do RPS é
+ * reservado antes do envio, ele é a chave para recuperar o desfeito.
+ *
+ * @param {Array<{serie, numero}>} chaves — até 50 por consulta
+ */
+async function consultarPorRPS(chaves) {
+  const cnpj = process.env.NFSE_SP_CNPJ || "41132782000108";
+  const im = process.env.NFSE_SP_IM || "69033951";
+
+  if (!Array.isArray(chaves) || chaves.length === 0) {
+    return { sucesso: false, erros: [{ codigo: "0", descricao: "Nenhuma chave informada." }], notas: [] };
+  }
+  if (chaves.length > 50) {
+    throw new Error("Máximo de 50 chaves de RPS por consulta.");
+  }
+
+  const detalhes = chaves
+    .map(
+      (c) =>
+        `<Detalhe xmlns="">` +
+        `<ChaveRPS>` +
+        `<InscricaoPrestador>${zeroEsq(im, 8)}</InscricaoPrestador>` +
+        `<SerieRPS>${escaparXml(c.serie)}</SerieRPS>` +
+        `<NumeroRPS>${Number(c.numero)}</NumeroRPS>` +
+        `</ChaveRPS>` +
+        `</Detalhe>`
+    )
+    .join("");
+
+  const pedido =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<PedidoConsultaNFe xmlns="${NS}" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
+    `<Cabecalho xmlns="" Versao="1">` +
+    `<CPFCNPJRemetente><CNPJ>${soDigitos(cnpj)}</CNPJ></CPFCNPJRemetente>` +
+    `</Cabecalho>` +
+    detalhes +
+    `</PedidoConsultaNFe>`;
+
+  const resposta = await chamarWs("ConsultaNFe", assinarXml(pedido));
+  if (resposta.status !== 200) {
+    return {
+      sucesso: false,
+      erros: [{ codigo: String(resposta.status), descricao: "HTTP " + resposta.status }],
+      notas: [],
+    };
+  }
+
+  const r = interpretarRetorno(resposta.corpo);
+
+  // cada <NFe> traz a ChaveNFe (número + verificação) e a ChaveRPS de origem
+  const notas = pegarTodos(r.xml, "NFe").map((bloco) => {
+    const chaveNFe = (pegarTodos(bloco, "ChaveNFe")[0] || "");
+    const chaveRPS = (pegarTodos(bloco, "ChaveRPS")[0] || "");
+    return {
+      serie: chaveRPS ? pegar(chaveRPS, "SerieRPS") : null,
+      numeroRps: chaveRPS ? pegar(chaveRPS, "NumeroRPS") : null,
+      numeroNota: chaveNFe ? pegar(chaveNFe, "Numero") : null,
+      codigoVerificacao: chaveNFe ? pegar(chaveNFe, "CodigoVerificacao") : null,
+      dataEmissao: pegar(bloco, "DataEmissaoNFe"),
+      status: pegar(bloco, "StatusNFe"),   // N = normal, C = cancelada
+      valorServicos: pegar(bloco, "ValorServicos"),
+    };
+  });
+
+  return { sucesso: r.sucesso, erros: r.erros, alertas: r.alertas, notas, xmlRetorno: resposta.corpo };
+}
+
+/* ------------------------------------------------------------------ */
 /* API do módulo                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -578,6 +653,7 @@ function statusCertificado() {
 
 module.exports = {
   SOAP_ACTIONS,
+  consultarPorRPS,
   emitirNFSe,
   statusCertificado,
   listarSoapActions,
