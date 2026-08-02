@@ -31,7 +31,7 @@ const { gerarParecer } = require("./parecer");
 const { auditarCertidao } = require("./auditor_cnd");
 const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
-const { emitirNFSe, statusCertificado } = require("./nfse_sp");
+const { emitirNFSe, statusCertificado, listarSoapActions } = require("./nfse_sp");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -71,6 +71,17 @@ function exigirTokenNFSe(req, res) {
 app.get("/nfse-sp/certificado", (req, res) => {
   if (!exigirTokenNFSe(req, res)) return;
   res.json(statusCertificado());
+});
+
+// Diagnóstico: lê o WSDL da Prefeitura e devolve os soapAction declarados.
+// O header SOAPAction tem que bater exatamente com o do serviço.
+app.get("/nfse-sp/wsdl", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    res.json(await listarSoapActions());
+  } catch (e) {
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
 });
 
 // Emissão (ou teste) de uma NFS-e por requisição.
