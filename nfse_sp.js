@@ -309,7 +309,7 @@ function chamarWs(metodo, mensagemXml) {
     headers: {
       "Content-Type": "text/xml; charset=utf-8",
       "Content-Length": body.length,
-      SOAPAction: `${NS}/${metodo}`,
+      SOAPAction: `${process.env.NFSE_SP_SOAPACTION_BASE || NS + "/"}${metodo}`,
     },
     agent: new https.Agent({
       pfx: pfxBuffer,
@@ -332,6 +332,70 @@ function chamarWs(metodo, mensagemXml) {
     req.write(body);
     req.end();
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Diagnóstico do WSDL                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Baixa o WSDL usando o mesmo certificado e devolve os soapAction que o
+ * serviço realmente declara. Existe porque o header SOAPAction precisa
+ * bater exatamente — deduzir do manual não é confiável.
+ */
+function baixarWsdl() {
+  const { pfxBuffer, senha } = lerCertificado();
+  const opcoes = {
+    host: WS_HOST,
+    path: WS_PATH + "?WSDL",
+    method: "GET",
+    agent: new https.Agent({
+      pfx: pfxBuffer,
+      passphrase: senha,
+      minVersion: "TLSv1.2",
+      keepAlive: false,
+    }),
+    timeout: 45000,
+  };
+  return new Promise((resolve, reject) => {
+    const req = https.request(opcoes, (res) => {
+      let d = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => (d += c));
+      res.on("end", () => resolve({ status: res.statusCode, corpo: d }));
+    });
+    req.on("timeout", () => req.destroy(new Error("Timeout ao baixar o WSDL.")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/** Lista { operacao, soapAction } a partir do WSDL. */
+async function listarSoapActions() {
+  const r = await baixarWsdl();
+  if (r.status !== 200) return { ok: false, status: r.status, trecho: r.corpo.slice(0, 500) };
+
+  const acoes = [];
+  const re = /<(?:\w+:)?operation[^>]*\bname="([^"]+)"[^>]*>([\s\S]*?)<\/(?:\w+:)?operation>/gi;
+  let m;
+  while ((m = re.exec(r.corpo))) {
+    const sa = m[2].match(/soapAction="([^"]*)"/i);
+    if (sa) acoes.push({ operacao: m[1], soapAction: sa[1] });
+  }
+  // fallback: pega todos os soapAction soltos
+  if (!acoes.length) {
+    const re2 = /soapAction="([^"]*)"/gi;
+    let m2;
+    while ((m2 = re2.exec(r.corpo))) acoes.push({ operacao: null, soapAction: m2[1] });
+  }
+  const vistos = new Set();
+  const unicas = acoes.filter((a) => {
+    const k = a.operacao + "|" + a.soapAction;
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+  return { ok: true, total: unicas.length, acoes: unicas, tamanhoWsdl: r.corpo.length };
 }
 
 /* ------------------------------------------------------------------ */
@@ -473,6 +537,8 @@ function statusCertificado() {
 module.exports = {
   emitirNFSe,
   statusCertificado,
+  listarSoapActions,
+  baixarWsdl,
   montarStringAssinatura,
   assinarRPS,
   assinarXml,
