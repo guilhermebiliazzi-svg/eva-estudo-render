@@ -294,6 +294,11 @@ function assinarXml(xml) {
       "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     ],
     digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
+    // URI="" = documento inteiro. Sem isto, a xml-crypto injeta Id="_0"
+    // no elemento raiz e a Prefeitura rejeita com erro 1001:
+    // "The 'Id' attribute is not declared." O schema não declara esse atributo.
+    uri: "",
+    isEmptyUri: true,
   });
   sig.computeSignature(xml);
   return sig.getSignedXml();
