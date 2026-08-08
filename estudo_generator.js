@@ -1,13 +1,19 @@
 /**
  * Gerador do Estudo de Mercado RE/MAX Ville (PPTX editável).
  *
+ * v2:
+ *  - Suporte a SALA/CONJUNTO COMERCIAL (tipo em data.tipo / imovel.tipo): coluna "Banheiros"
+ *    no lugar de "Suítes" nas amostras e linguagem neutra ("unidade"/"edifício").
+ *  - Slide de Vendidos ITBI destaca as UNIDADES IDÊNTICAS em área (mesma área total IPTU
+ *    da unidade avaliada) e traz o painel de m²: R$/m² das unidades idênticas (sobre a
+ *    área útil informada) e R$/m² global do condomínio (base área construída ITBI).
+ *  - Modo "global" (sem venda de unidade idêntica): conclusão apresenta o m² global do
+ *    condomínio, sem valor fechado da unidade, com aviso explícito.
+ *
  *   const { buildEstudo } = require("./estudo_generator");
  *   await buildEstudo(data, { assets: "/path/brand", out: "/path/estudo.pptx" });
  *
- * `data` segue o contrato em data_marquise.json.
- * `opts.assets` = pasta com os ativos FIXOS da marca
- *   (remax_white.png, remax_navy.png, remax_map_official.png, ciclo_vida.png).
- * Fotos do imóvel/corretor vêm por caminho/URL dentro de `data`.
+ * `data` segue o contrato em data_marquise.json (+ campos v2: tipo, area_total, area_util).
  */
 const pptxgen = require("pptxgenjs");
 const { vendidosAggregatedFromRows } = require("./itbi_format");
@@ -20,9 +26,7 @@ const H=5.625, MX=0.55;
 
 function buildEstudo(data, opts={}){
   // BLINDAGEM + AGREGAÇÃO: se vendidos vier cru do SQL (valor numérico / campo area_m2 / is_ancora),
-  // AGREGA por data (apto + vagas mesmo dia somados em 1 linha) e formata. Idempotente: linhas
-  // já formatadas/agregadas (valor string) passam intactas. Sem isso, vagas avulsas aparecem como
-  // linhas separadas no slide e distorcem a "tendência" (R$ 115k vaga 2019 vs R$ 440k apto 2025).
+  // AGREGA por data (apto + vagas mesmo dia somados em 1 linha) e formata. Idempotente.
   if (Array.isArray(data.vendidos) && data.vendidos.length &&
       (typeof data.vendidos[0].valor === "number" || "area_m2" in data.vendidos[0] || "is_ancora" in data.vendidos[0])) {
     data.vendidos = vendidosAggregatedFromRows(data.vendidos);
@@ -40,8 +44,6 @@ function buildEstudo(data, opts={}){
     s.addText(txt.toUpperCase(),{x:x+0.22,y:y-0.05,w:7,h:0.28,fontFace:BODY,fontSize:11,
       color:color,bold:true,charSpacing:3,align:"left",valign:"middle",margin:0});
   }
-  const eyebrow_w=(s,txt,x=MX,y=0.55)=>eyebrow(s,txt,x,y,WHITE) // white eyebrow keeps red square
-    ; // note: square stays red; label white
   function eyebrowWhite(s,txt,x=MX,y=0.55){
     s.addShape(p.shapes.RECTANGLE,{x:x,y:y+0.02,w:0.13,h:0.13,fill:{color:RED},line:{type:"none"}});
     s.addText(txt.toUpperCase(),{x:x+0.22,y:y-0.05,w:6,h:0.28,fontFace:BODY,fontSize:11,
@@ -67,9 +69,24 @@ function buildEstudo(data, opts={}){
   const yearOf=(d)=> (String(d).match(/(\d{4})/g)||[]).slice(-1)[0] || "";
 
   const im = data.imovel||{}, co = data.corretor||{}, val = data.valoracao||{};
-  // edata = label de data exibido nos slides 1 e 14. Aceita string direta;
-  // se vier objeto/vazio (estudo_data costuma chegar como {} do agente), usa hoje.
-  // Sem isso, {text: {}} explode no pptxgenjs ("itext.text.includes is not a function").
+  // ---- v2: tipo do imóvel / modo da valoração
+  const tipoStr = String(data.tipo || im.tipo || im.titulo || "");
+  const isComercial = /sala|conjunto|comercial|loja|laje|escrit/i.test(tipoStr) && !/apartamento/i.test(tipoStr);
+  const modoGlobal = val.modo === "global";
+  // área total de referência (IPTU) — vem do body (data.area_total) ou da própria valoração
+  const areaTotalRef = Number(data.area_total) > 0 ? Number(data.area_total) : (Number(val.area_total_ref) > 0 ? Number(val.area_total_ref) : null);
+  const areaFmt = v => String(Number(v)).replace(".", ",");
+  // extrai número de "98,5 m²" / "R$ 700.000,00" formatados
+  const numOf = v => {
+    const m = String(v||"").match(/[\d.,]+/);
+    if (!m) return 0;
+    return Number(m[0].replace(/\./g,"").replace(",","."));
+  };
+  // preferência: flag `equivalente` marcada pelo orchestrator sobre os números CRUS (exata);
+  // fallback: comparação sobre a área formatada (caminho blindagem, linhas cruas no body)
+  const ehAreaIdentica = v => v.equivalente === true ||
+    (areaTotalRef != null && Math.abs(numOf(v.area) - areaTotalRef) < 0.05);
+
   const edata = (typeof data.estudo_data === "string" && data.estudo_data.trim())
               || new Date().toLocaleDateString("pt-BR");
 
@@ -130,8 +147,6 @@ function buildEstudo(data, opts={}){
     const tx=4.05;
     s.addText(co.nome||"",{x:tx,y:1.8,w:5.4,h:0.6,fontFace:HEAD,fontSize:28,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
     s.addText(`CRECI ${co.creci||""} · ${co.unidade||""}`,{x:tx,y:2.42,w:5.4,h:0.34,fontFace:BODY,fontSize:12.5,color:RED,bold:true,charSpacing:1,align:"left",valign:"middle",margin:0});
-    // bio: usa o que vier; se vazia, fallback genérico (a tabela corretores_associados não tem coluna bio
-    // — o corretor pode cadastrar via outro fluxo; até lá, evita slide vazio)
     const bioFallback = `Atua representando vendedores em ${co.unidade||"RE/MAX Ville"}, com método: precificação fundamentada em dados de ITBI, exposição na rede RE/MAX e negociação conduzida com discrição e transparência — para anunciar pelo valor certo e vender no tempo certo.`;
     s.addText(co.bio||bioFallback,{x:tx,y:2.95,w:5.45,h:1.8,fontFace:BODY,fontSize:14,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
     footer(s,4);
@@ -183,7 +198,7 @@ function buildEstudo(data, opts={}){
   // ===== SLIDE 7 — METODOLOGIA (institucional) =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"06 · Metodologia"); title(s,"Como chegamos ao valor");
-    const steps=[["1","Vendidos no mesmo prédio","Transações reais de ITBI do próprio condomínio são a base — não achismo."],
+    const steps=[["1","Vendidos no mesmo prédio","Transações reais de ITBI do próprio condomínio — só unidades de área idêntica à avaliada ancoram o valor."],
       ["2","Ajuste no tempo + depreciação","Âncora na venda recente, com correção monetária e depreciação."],
       ["3","Comparáveis ativos","Anúncios atuais semelhantes calibram o preço de pedido."]];
     const cw=2.85, gap=0.18, y0=1.8, ch=1.75;
@@ -203,12 +218,10 @@ function buildEstudo(data, opts={}){
     footer(s,7);
   }
 
-  // ===== SLIDE 8 — O IMÓVEL — grade dupla label/value (gold standard) =====
+  // ===== SLIDE 8 — O IMÓVEL — grade dupla label/value =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"07 · O Imóvel"); title(s,"O imóvel avaliado");
     const ficha = Array.isArray(im.ficha) ? im.ficha : [];
-    // grade 2 colunas × N linhas: 1 par (label/valor) por célula
-    // áreas: x começa em MX (col esq) e MX + colW + gap (col dir); y começa em 1.85
     const gridX = MX, gridY = 1.85;
     const colW  = 4.35, gap = 0.2, rowH = 0.95;
     const labelH = 0.30, valueH = 0.55;
@@ -221,13 +234,10 @@ function buildEstudo(data, opts={}){
         const row = Math.floor(i / 2);
         const x = gridX + col * (colW + gap);
         const y = gridY + row * rowH;
-        // label (eyebrow vermelho pequeno)
         s.addText(String(par[0]||"").toUpperCase(),
           {x, y, w:colW, h:labelH, fontFace:BODY, fontSize:10, color:RED, bold:true, charSpacing:1.5, align:"left", valign:"top", margin:0});
-        // valor (navy bold serif)
         s.addText(String(par[1]||""),
           {x, y:y+labelH, w:colW, h:valueH, fontFace:HEAD, fontSize:17, color:NAVY, bold:true, align:"left", valign:"top", margin:0, lineSpacingMultiple:1.05});
-        // hairline separador (exceto última linha)
         const lastRow = Math.floor((ficha.length-1)/2);
         if (row < lastRow) s.addShape(p.shapes.LINE,{x, y:y+rowH-0.05, w:colW, h:0, line:{color:LINE,width:0.5}});
       });
@@ -239,7 +249,8 @@ function buildEstudo(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"08 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
-    const head=["Imóvel","Bairro","Área","Suítes","Vagas","Pedido","R$/m²"].map(hdr);
+    // v2: em imóvel comercial a coluna de suítes vira banheiros
+    const head=["Imóvel","Bairro","Área",(isComercial?"Banh.":"Suítes"),"Vagas","Pedido","R$/m²"].map(hdr);
     const cell=(t,o={})=>({text:String(t),options:{fontSize:11,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,...o}});
     const lk=(u)=>u?({hyperlink:{url:u,tooltip:"Abrir anúncio"},color:LINK,underline:true}):{};
     const amostras = data.amostras||[];
@@ -253,12 +264,11 @@ function buildEstudo(data, opts={}){
     });
     s.addTable([head,...rows],{x:MX,y:1.75,w:8.9,colW:[2.5,1.25,0.95,0.85,0.85,1.3,1.2],
       border:{type:"solid",color:LINE,pt:0.75},rowH:0.5,valign:"middle",fontFace:BODY,autoPage:false});
-    // nota: monta a partir das unidades do mesmo prédio
     const mp = amostras.filter(a=>a.tipo==="mesmo_predio");
     let nota;
     if(mp.length){
       const partes=[{text:"Mesmo prédio à venda: ",options:{color:INK}}];
-      mp.forEach((a,i)=>{ partes.push({text:`${a.ref||a.nome} (${a.suites} suítes) ${a.pedido}`,options:{bold:true,color:RED}});
+      mp.forEach((a,i)=>{ partes.push({text:`${a.ref||a.nome} (${a.suites} ${isComercial?"banh.":"suítes"}) ${a.pedido}`,options:{bold:true,color:RED}});
         if(i<mp.length-1) partes.push({text:" · ",options:{color:INK}}); });
       partes.push({text:".   ",options:{color:INK}});
       partes.push({text:"Azul",options:{color:LINK,bold:true}});
@@ -271,69 +281,93 @@ function buildEstudo(data, opts={}){
     footer(s,9);
   }
 
-  // ===== SLIDE 10 — VENDIDOS ITBI — data-driven =====
+  // ===== SLIDE 10 — VENDIDOS ITBI — data-driven (v2: unidades idênticas + painel de m²) =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Vendidos"); title(s,"Transações reais — ITBI");
     s.addText("Mesmo prédio · Prefeitura de São Paulo",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
     const head=["Data","Unidade","Área constr.*","Valor","R$/m²"].map(hdr);
     const cell=(t,o={})=>({text:String(t),options:{fontSize:11,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
-    const HL={color:ICETINT};
+    const HL={color:ICETINT};   // âncora
+    const EQ={color:REDTINT};   // unidade idêntica em área (não-âncora)
     const allVend = data.vendidos||[];
-    // cabe ~8 linhas no slide. Se passar, mantém a mais antiga (base da tendência)
-    // + as mais recentes (inclui a âncora) e sinaliza o total no rodapé.
     const MAXFIT = 8;
     let vend = allVend, trunc = 0;
     if (allVend.length > MAXFIT) {
-      vend = [allVend[0], ...allVend.slice(allVend.length-(MAXFIT-1))];
+      // prioriza: mais antiga (base da tendência) + unidades idênticas + mais recentes
+      const primeiro = allVend[0];
+      const prior = [...allVend.slice(1)].reverse()   // mais recentes primeiro
+        .sort((a,b)=> (ehAreaIdentica(b)?1:0) - (ehAreaIdentica(a)?1:0)); // idênticas na frente (sort estável)
+      const escolhidos = new Set([primeiro, ...prior.slice(0, MAXFIT-1)]);
+      vend = allVend.filter(v => escolhidos.has(v)); // reexibe em ordem cronológica
       trunc = allVend.length - vend.length;
     }
     const rowH = vend.length > 6 ? 0.33 : 0.42;
-    const rows = vend.map(v=>{ const f=v.ancora?HL:undefined;
-      return [cell(v.data,v.ancora?{fill:HL,bold:true}:{}),cell(v.unidade,v.ancora?{fill:HL,bold:true}:{}),
-        cell(v.area,f?{fill:f}:{}),cell(v.valor,v.ancora?{fill:HL,bold:true}:{}),cell(v.valor_m2,f?{fill:f}:{})];
+    const rows = vend.map(v=>{
+      const eq = ehAreaIdentica(v);
+      const f = v.ancora ? HL : (eq ? EQ : undefined);
+      const b = Boolean(v.ancora || eq);
+      return [cell(v.data,{fill:f,bold:b}),cell(v.unidade,{fill:f,bold:b}),
+        cell(v.area,{fill:f,bold:eq}),cell(v.valor,{fill:f,bold:b}),cell(v.valor_m2,{fill:f})];
     });
     s.addTable([head,...rows],{x:MX,y:1.7,w:5.7,colW:[1.15,1.55,1.1,1.1,0.8],
       border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false});
-    // callout de tendência (primeiro -> âncora) — adaptativo ao número de pontos e direção
-    const de = vend[0]||{}, ate = vend.find(v=>v.ancora) || vend[vend.length-1] || {};
+
+    // ---- callout à direita: painel de m² (v2) ou tendência (legado)
     const cx=6.55, cw=2.9;
     s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
-
-    // helper: extrai número do valor formatado ("R$ 700.000,00" → 700000) para comparação direta
-    const numOf = v => {
-      const m = String(v||"").match(/[\d.,]+/);
-      if (!m) return 0;
-      return Number(m[0].replace(/\./g,"").replace(",","."));
-    };
-    const ehMesmoPonto = de && ate && de.data === ate.data && numOf(de.valor) === numOf(ate.valor);
-    const dV = numOf(de.valor), aV = numOf(ate.valor);
-    const diffPct = dV > 0 ? ((aV - dV) / dV) * 100 : 0;
-
-    if (vend.length <= 1 || ehMesmoPonto) {
-      // só 1 transação real: não mostra "tendência" (que precisa de 2 pontos)
-      s.addText("ÚNICA VENDA REGISTRADA",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
-      s.addText([{text:String(ate.valor||de.valor||""),options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
-        {text:yearOf(ate.data||de.data),options:{fontSize:12,color:ICE,breakLine:true}},
+    const temPainelM2 = Boolean(val.m2_equivalente_util || val.m2_global);
+    if (temPainelM2 && !modoGlobal && val.m2_equivalente_util) {
+      // modo equivalente: m² das idênticas (área útil) + m² global (área ITBI)
+      s.addText("R$/M² — UNIDADES IDÊNTICAS",{x:cx+0.25,y:1.9,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
+      s.addText([{text:val.m2_equivalente_util,options:{fontSize:21,bold:true,color:WHITE,breakLine:true}},
+        {text:`sobre a área útil de ${val.area_util_ref?areaFmt(val.area_util_ref):"—"} m² · ${val.equivalentes_qtd} venda${val.equivalentes_qtd>1?"s":""} de ${areaFmt(areaTotalRef)} m² (IPTU)`,options:{fontSize:9.5,color:ICE}}],
+        {x:cx+0.25,y:2.18,w:cw-0.5,h:0.85,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.08});
+      s.addShape(p.shapes.LINE,{x:cx+0.25,y:3.12,w:cw-0.5,h:0,line:{color:"24395C",width:1}});
+      s.addText("R$/M² GLOBAL DO CONDOMÍNIO",{x:cx+0.25,y:3.2,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
+      s.addText([{text:val.m2_global||"",options:{fontSize:21,bold:true,color:WHITE,breakLine:true}},
+        {text:"todas as vendas · área construída do ITBI",options:{fontSize:9.5,color:ICE}}],
+        {x:cx+0.25,y:3.48,w:cw-0.5,h:0.85,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.08});
+    } else if (temPainelM2 && modoGlobal) {
+      // modo global: sem venda idêntica
+      s.addText("SEM VENDA DE UNIDADE IDÊNTICA",{x:cx+0.25,y:1.9,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
+      s.addText([{text:val.m2_global||"",options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
+        {text:"R$/m² global do condomínio · área construída ITBI",options:{fontSize:10,color:ICE,breakLine:true}},
         {text:"",options:{breakLine:true,fontSize:6}},
-        {text:"Histórico insuficiente para inferir tendência — apenas 1 transação na base.",options:{fontSize:10,color:ICE,italic:true}}],
-        {x:cx+0.25,y:2.4,w:cw-0.5,h:2.0,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+        {text:`Nenhuma venda com ${areaFmt(areaTotalRef)} m² de área total — a referência é o m² global, não um valor fechado da unidade.`,options:{fontSize:9.5,color:ICE,italic:true}}],
+        {x:cx+0.25,y:2.25,w:cw-0.5,h:2.2,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
     } else {
-      // 2+ pontos: tendência real, com texto direcional
-      let direcao;
-      if (Math.abs(diffPct) < 1)        direcao = "estabilidade em termos nominais";
-      else if (diffPct > 0)              direcao = (diffPct > 20 ? "alta acima do IPCA" : "alta moderada");
-      else                                direcao = (diffPct < -10 ? "queda em termos reais" : "queda leve");
-      s.addText("TENDÊNCIA REAL DO PRÉDIO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
-      s.addText([{text:String(de.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
-        {text:yearOf(de.data),options:{fontSize:11,color:ICE}}],
-        {x:cx+0.25,y:2.3,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
-      s.addText("→",{x:cx+0.25,y:3.0,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:16,color:RED,bold:true,align:"left",valign:"middle",margin:0});
-      s.addText([{text:String(ate.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
-        {text:yearOf(ate.data)+" — "+direcao,options:{fontSize:11,color:ICE}}],
-        {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+      // legado: tendência (sem area_total informada)
+      const de = vend[0]||{}, ate = vend.find(v=>v.ancora) || vend[vend.length-1] || {};
+      const ehMesmoPonto = de && ate && de.data === ate.data && numOf(de.valor) === numOf(ate.valor);
+      const dV = numOf(de.valor), aV = numOf(ate.valor);
+      const diffPct = dV > 0 ? ((aV - dV) / dV) * 100 : 0;
+      if (vend.length <= 1 || ehMesmoPonto) {
+        s.addText("ÚNICA VENDA REGISTRADA",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+        s.addText([{text:String(ate.valor||de.valor||""),options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
+          {text:yearOf(ate.data||de.data),options:{fontSize:12,color:ICE,breakLine:true}},
+          {text:"",options:{breakLine:true,fontSize:6}},
+          {text:"Histórico insuficiente para inferir tendência — apenas 1 transação na base.",options:{fontSize:10,color:ICE,italic:true}}],
+          {x:cx+0.25,y:2.4,w:cw-0.5,h:2.0,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+      } else {
+        let direcao;
+        if (Math.abs(diffPct) < 1)        direcao = "estabilidade em termos nominais";
+        else if (diffPct > 0)              direcao = (diffPct > 20 ? "alta acima do IPCA" : "alta moderada");
+        else                                direcao = (diffPct < -10 ? "queda em termos reais" : "queda leve");
+        s.addText("TENDÊNCIA REAL DO PRÉDIO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+        s.addText([{text:String(de.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+          {text:yearOf(de.data),options:{fontSize:11,color:ICE}}],
+          {x:cx+0.25,y:2.3,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+        s.addText("→",{x:cx+0.25,y:3.0,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:16,color:RED,bold:true,align:"left",valign:"middle",margin:0});
+        s.addText([{text:String(ate.valor||""),options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
+          {text:yearOf(ate.data)+" — "+direcao,options:{fontSize:11,color:ICE}}],
+          {x:cx+0.25,y:3.35,w:cw-0.5,h:0.75,fontFace:HEAD,align:"left",valign:"top",margin:0});
+      }
     }
-    s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios; a comparação direta é pelo valor total.${trunc?`  ·  ${allVend.length} transações no total; exibindo a mais antiga e as ${MAXFIT-1} mais recentes.`:""}`,
+    const notaIdenticas = areaTotalRef != null
+      ? `  ·  Destaque: unidades com a MESMA área total da avaliada (${areaFmt(areaTotalRef)} m² IPTU) — só elas se comparam diretamente; o m² útil delas usa a área útil informada.`
+      : "";
+    s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios.${notaIdenticas}${trunc?`  ·  ${allVend.length} transações no total; exibindo ${vend.length}.`:""}`,
       {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     footer(s,10);
   }
@@ -342,8 +376,6 @@ function buildEstudo(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
     s.addImage({path:A+"ciclo_vida.png",x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
-    // marcador dinâmico sobre o gráfico — posicionado pela idade real do imóvel.
-    // geometria do plot dentro do PNG (precisa casar com o ciclo_vida.png): L/R/T/B
     if (im.idade_anos != null) {
       const imgX=MX, imgY=1.55, imgW=6.55, imgH=6.55*5.0/10.6;
       const PL=0.07, PR=0.97, PT=0.14, PB=0.76;
@@ -360,8 +392,6 @@ function buildEstudo(data, opts={}){
     const predio=im.predio_curto||"imóvel";
     const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
     const vend=data.vendidos||[]; const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
-    // guard: só afirma "está entrando no platô" quando a idade é conhecida.
-    // sem idade, o terceiro parágrafo vira contextual (não inventa estágio do ciclo).
     const terceiroParag = (im.idade_anos != null)
       ? `O ${predio}${idadeTxt} está entrando no platô — por isso projetar o boom para a frente seria um erro.`
       : `Em prédios com histórico de venda forte como este, a fase do ciclo importa: o boom não se projeta linearmente para a frente.`;
@@ -372,8 +402,6 @@ function buildEstudo(data, opts={}){
       {text:"",options:{breakLine:true,fontSize:6}},
       {text:terceiroParag,options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
-    // rodapé: só monta "R$X (ano) → R$Y (ano)" quando temos AMBAS as pontas com VALOR e DATA reais.
-    // sem isso, não monta a sentença (em vez de "(undefined) → (undefined)").
     const temPontas = de && de.valor && de.data && ate && ate.valor && ate.data;
     if (temPontas) {
       s.addText(`A tabela do ITBI confirma: ${de.valor} (${yearOf(de.data)}) → ${ate.valor} (${yearOf(ate.data)}).`,
@@ -383,10 +411,9 @@ function buildEstudo(data, opts={}){
   }
 
   // ===== SLIDE 12 — PEDIDO x FECHADO + AJUSTE — data-driven =====
-  { let s=p.addSlide(); s.background={color:WHITE};
+  if (!modoGlobal) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"11 · Pedido × Fechado"); title(s,"O ajuste no tempo e a depreciação");
     const cw=4.35, ch=1.4, y0=1.75;
-    // distingue concorrente real de teto calculado — sem inventar "anúncio" inexistente
     const concRealAd = val.concorrente_origem === "anuncio";
     const concEyebrow = concRealAd ? "CONCORRENTE DIRETO · MESMO PRÉDIO" : "TETO CALCULADO · IPCA";
     const concBullet  = concRealAd
@@ -415,21 +442,58 @@ function buildEstudo(data, opts={}){
       {text:"Depreciação e platô do ciclo de vida reforçam o ajuste — projeção capada, sem extrapolar o boom.",options:{bullet:{code:"2022"},color:INK}},
     ],{x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
     footer(s,12);
+  } else {
+    // ===== SLIDE 12 (MODO GLOBAL) — base de comparação pelo m² do condomínio =====
+    let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"11 · Base de Comparação"); title(s,"Comparação pelo m² do condomínio");
+    const cw=4.35, ch=1.4, y0=1.75;
+    s.addShape(p.shapes.RECTANGLE,{x:MX,y:y0,w:cw,h:ch,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    s.addText("R$/M² GLOBAL DO CONDOMÍNIO · ITBI",{x:MX+0.25,y:y0+0.2,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1,margin:0});
+    s.addText([{text:val.m2_global||"",options:{fontSize:23,bold:true,color:WHITE,breakLine:true}},
+      {text:"todas as vendas do prédio · área construída (IPTU)",options:{fontSize:11.5,color:ICE}}],
+      {x:MX+0.25,y:y0+0.55,w:cw-0.5,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    const x2=MX+cw+0.2;
+    s.addShape(p.shapes.RECTANGLE,{x:x2,y:y0,w:cw,h:ch,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
+    s.addShape(p.shapes.RECTANGLE,{x:x2,y:y0,w:0.09,h:ch,fill:{color:RED},line:{type:"none"}});
+    s.addText("ÁREA TOTAL DA UNIDADE AVALIADA · IPTU",{x:x2+0.28,y:y0+0.2,w:cw-0.45,h:0.3,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:1,margin:0});
+    s.addText([{text:(areaTotalRef!=null?`${areaFmt(areaTotalRef)} m²`:"—"),options:{fontSize:23,bold:true,color:NAVY,breakLine:true}},
+      {text:"mesma base de área das vendas do ITBI",options:{fontSize:11.5,color:INK}}],
+      {x:x2+0.28,y:y0+0.55,w:cw-0.45,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    s.addText("POR QUE NÃO HÁ VALOR FECHADO",{x:MX,y:3.45,w:5,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
+    s.addText(val.aviso_sem_identica||"",
+      {x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
+    footer(s,12);
   }
 
   // ===== SLIDE 13 — CONCLUSÃO — data-driven =====
   { let s=p.addSlide(); s.background={color:NAVY};
     eyebrowWhite(s,"Conclusão",MX,0.55);
-    s.addText("Valor de mercado estimado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
-    s.addText(val.valor_mercado||"",{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText("faixa de "+(val.faixa||""),{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
-    s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
-    s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
-    s.addText([{text:"Preço de anúncio sugerido",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
-      {text:val.anuncio_sugerido||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
-      {text:val.anuncio_sub||"",options:{fontSize:11,color:ICE}}],
-      {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-    s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+    if (modoGlobal) {
+      s.addText("Valor do m² — condomínio (área construída ITBI)",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addText(val.m2_global||"",{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+      s.addText(`sem venda de unidade idêntica (${areaTotalRef!=null?areaFmt(areaTotalRef):"—"} m² IPTU) — este estudo não fecha um valor para a unidade`,
+        {x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:14,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
+      s.addText([{text:"Como usar esta referência",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
+        {text:`m² global × ${areaTotalRef!=null?areaFmt(areaTotalRef):"—"} m² (área total IPTU)`,options:{fontSize:18,color:WHITE,bold:true,breakLine:true}},
+        {text:"leitura de referência — não é preço sugerido",options:{fontSize:11,color:ICE}}],
+        {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+    } else {
+      s.addText("Valor de mercado estimado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addText(val.valor_mercado||"",{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+      const faixaLinha = "faixa de "+(val.faixa||"")
+        + (val.m2_equivalente_util ? `   ·   ${val.m2_equivalente_util} útil — unidades idênticas` : "");
+      s.addText(faixaLinha,{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
+      s.addText([{text:"Preço de anúncio sugerido",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
+        {text:val.anuncio_sugerido||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
+        {text:val.anuncio_sub||"",options:{fontSize:11,color:ICE}}],
+        {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+    }
     footer(s,13,true);
   }
 
@@ -437,7 +501,7 @@ function buildEstudo(data, opts={}){
   { let s=p.addSlide(); s.background={color:NAVY};
     eyebrowWhite(s,"Ressalvas e Contato",MX,0.55);
     s.addText("Sobre este estudo",{x:MX,y:1.05,w:9,h:0.55,fontFace:HEAD,fontSize:24,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText(data.ressalvas || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), anúncios ativos comparáveis e índices do IBGE disponíveis na data de elaboração. Valores de mercado variam conforme as condições de negociação.",
+    s.addText(data.ressalvas || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), anúncios ativos comparáveis e índices do IBGE disponíveis na data de elaboração. A comparação entre unidades usa a área total construída (IPTU/ITBI); valores de mercado variam conforme as condições de negociação.",
       {x:MX,y:1.7,w:8.9,h:1.4,fontFace:BODY,fontSize:13,color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
     s.addShape(p.shapes.LINE,{x:MX,y:3.35,w:8.9,h:0,line:{color:"24395C",width:1}});
     s.addImage({path:A+"remax_white.png",x:MX,y:3.65,w:2.1,h:2.1*1264/2673});

@@ -1,17 +1,29 @@
 /**
  * EVA · Função de valoração (passo D) — produz o bloco "valoracao" do contrato.
  *
- * Aplica as regras travadas:
- *  - âncora = venda real mais recente do MESMO prédio (ITBI);
+ * v2 — UNIDADES IDÊNTICAS EM ÁREA + m² GLOBAL:
+ *  - O corretor informa a ÁREA TOTAL do IPTU (mesma base do ITBI). Só vendas de
+ *    unidades com área construída IDÊNTICA (match exato, tolerância numérica mínima)
+ *    são comparáveis à unidade avaliada — unidades de tamanho diferente NÃO ancoram.
+ *  - âncora = venda mais recente ENTRE AS UNIDADES IDÊNTICAS (modo "equivalente");
+ *  - R$/m² das unidades idênticas calculado sobre a ÁREA ÚTIL informada (não a área ITBI);
+ *  - R$/m² global do condomínio calculado aí sim sobre a área construída do ITBI;
+ *  - sem venda idêntica (modo "global"): NÃO produz valor fechado da unidade — o estudo
+ *    apresenta o m² global do condomínio (base ITBI) com aviso explícito;
+ *  - sem area_total (modo "legado"): comportamento anterior preservado, intocado.
+ *
+ * Regras travadas mantidas:
  *  - teto por correção monetária = âncora corrigida pelo IPCA até hoje;
  *  - teto de concorrência = menor anúncio equivalente no mesmo prédio;
  *  - preço de anúncio sugerido = min(teto_concorrencia, teto_correcao)  [override possível];
  *  - fechamento esperado = anúncio × (1 − deságio);
  *  - valor de mercado e faixa derivados (arredondados p/ leitura).
  *
- * Roda sobre valores NUMÉRICOS (R$), não sobre as strings do contrato.
+ * Roda sobre valores NUMÉRICOS (R$), não sobre as strings do contrato — na prática,
+ * sobre as linhas AGREGADAS por data (apto + vagas do dia) que o orchestrator monta.
  *   const { buildValoracao } = require("./valoracao");
- *   data.valoracao = buildValoracao({ vendidos, amostras, ref: {ano:2026, mes:4} });
+ *   data.valoracao = buildValoracao({ vendidos, amostras, ref: {ano:2026, mes:8},
+ *                                     opts: { area_total: 98, area_util: 83, tipo: "sala" } });
  */
 
 // IPCA anual (%) — atualizar / ou puxar do BCB série 433 (IPCA mensal).
@@ -38,6 +50,8 @@ const reais   = v => "R$ " + reaisN(v);                               // < R$1mi
 const milhoes = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " milhões";
 const mi      = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v)).replace(".", ",") + " mi";
 const pct     = f => "+" + ((f-1)*100).toFixed(1).replace(".", ",") + "%";
+const m2fmt   = v => "R$ " + milhar(Math.round(Number(v))) + "/m²";
+const areaFmt = v => String(Number(v)).replace(".", ",");
 
 function parseDataBR(d){ // "19/12/2023" ou Date/ISO -> {ano,mes}
   if (d instanceof Date) return { ano:d.getUTCFullYear(), mes:d.getUTCMonth()+1 };
@@ -51,17 +65,18 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const hoje      = new Date();
   const anoRef    = ref?.ano ?? hoje.getFullYear();
   const mesRef    = ref?.mes ?? (hoje.getMonth()+1);
+  const areaTotal = Number(opts.area_total) > 0 ? Number(opts.area_total) : null; // área IPTU/ITBI da unidade avaliada
+  const areaUtil  = Number(opts.area_util)  > 0 ? Number(opts.area_util)  : null; // área útil informada
 
-  // 1) âncora = venda real mais recente do mesmo prédio — porém de APARTAMENTO.
-  //    Vaga avulsa NUNCA ancora (uma vaga não precifica um apê). As vagas continuam
-  //    no conjunto/tabela (o corretor correlaciona pela data); só não viram âncora.
+  // 1) vaga avulsa NUNCA compara nem ancora (uma vaga não precifica uma unidade).
+  //    As vagas continuam no conjunto/tabela; só não entram na régua.
   const ehVagaAvulsa = v => {
     const u = String(v.unidade || "").trim();
     const a = Number(v.area_m2 ?? v.area ?? 0);
     return /^(VG|VAGA|BOX)\b/i.test(u) || (a > 0 && a < 30);
   };
-  const aptos = vendidos.filter(v => !ehVagaAvulsa(v));
-  const pool  = aptos.length ? aptos : vendidos; // fallback raro: só houver vaga
+  const unidades = vendidos.filter(v => !ehVagaAvulsa(v));
+  const pool  = unidades.length ? unidades : vendidos; // fallback raro: só houver vaga
   // Guard: sem nada no pool → mensagem clara em vez de "Cannot read properties of undefined (reading 'valor')"
   if (!pool.length) {
     const err = new Error(
@@ -71,9 +86,75 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     err.code = "NO_ITBI_DATA";
     throw err;
   }
+
+  // ===== v2 · UNIDADES IDÊNTICAS EM ÁREA (área construída ITBI === área total IPTU informada) =====
+  const areaOf = v => Number(v.area_m2 ?? v.area ?? 0);
+  const EPS = 0.05; // tolerância só para ruído de ponto flutuante — o match é exato (IPTU = ITBI)
+  const equivalentes = areaTotal ? unidades.filter(v => Math.abs(areaOf(v) - areaTotal) < EPS) : [];
+  // modo: "equivalente" (há venda de unidade idêntica) | "global" (área informada, sem idêntica) | "legado" (sem area_total)
+  const modo = !areaTotal ? "legado" : (equivalentes.length ? "equivalente" : "global");
+
   const dKey  = v => parseDataBR(v.data).ano*12 + parseDataBR(v.data).mes;
-  const anchor = pool.find(v => v.is_ancora === true || v.ancora === true) ||
-    [...pool].sort((a,b)=> dKey(b) - dKey(a))[0];
+
+  // ===== v2 · m² GLOBAL DO CONDOMÍNIO — base área construída ITBI (todas as unidades, sem vagas) =====
+  const somaValor = unidades.reduce((s,v)=> s + Number(v.valor||0), 0);
+  const somaArea  = unidades.reduce((s,v)=> s + areaOf(v), 0);
+  const m2GlobalN = somaArea > 0 ? somaValor/somaArea : null;
+
+  // ===== v2 · m² DAS UNIDADES IDÊNTICAS =====
+  // sobre a ÁREA ÚTIL informada (planta idêntica ⇒ mesma área útil da avaliada) — NÃO sobre a área ITBI
+  const m2EqUtilN = (modo === "equivalente" && areaUtil)
+    ? equivalentes.reduce((s,v)=> s + Number(v.valor||0), 0) / (equivalentes.length * areaUtil)
+    : null;
+  // referência das idênticas na base ITBI (área total), para leitura lado a lado com o global
+  const m2EqItbiN = (modo === "equivalente")
+    ? equivalentes.reduce((s,v)=> s + Number(v.valor||0), 0) / (equivalentes.length * areaTotal)
+    : null;
+
+  const blocoM2 = {
+    modo,
+    area_total_ref: areaTotal,
+    area_util_ref: areaUtil,
+    equivalentes_qtd: equivalentes.length,
+    m2_global: m2GlobalN != null ? m2fmt(m2GlobalN) : "",
+    m2_global_label: "condomínio · área construída ITBI",
+    m2_equivalente_util: m2EqUtilN != null ? m2fmt(m2EqUtilN) : "",
+    m2_equivalente_util_label: (modo === "equivalente" && areaUtil)
+      ? `unidades idênticas (${areaFmt(areaTotal)} m² IPTU) · sobre a área útil de ${areaFmt(areaUtil)} m²`
+      : "",
+    m2_equivalente_itbi: m2EqItbiN != null ? m2fmt(m2EqItbiN) : "",
+  };
+
+  // ===== v2 · MODO GLOBAL: sem venda de unidade idêntica → NÃO precifica a unidade =====
+  if (modo === "global") {
+    return {
+      ...blocoM2,
+      valor_mercado: "",
+      faixa: "",
+      anuncio_sugerido: "",
+      anuncio_sub: "",
+      aviso_sem_identica:
+        `Nenhuma venda de unidade com ${areaFmt(areaTotal)} m² de área total (IPTU) registrada no ITBI deste condomínio. ` +
+        `Unidades de tamanhos diferentes não são comparáveis entre si — por isso este estudo apresenta o valor do m² GLOBAL do condomínio ` +
+        `(base: área construída do ITBI), e não um valor fechado para a unidade.`,
+      conclusao_apoio:
+        `Referência de leitura: m² global do condomínio (${m2GlobalN != null ? m2fmt(m2GlobalN) : "—"}) aplicado sobre a área total da unidade ` +
+        `(${areaFmt(areaTotal)} m² IPTU). A precificação fechada depende de venda de unidade idêntica ou de análise complementar do corretor.`,
+      _debug: {
+        modo, area_total: areaTotal, area_util: areaUtil,
+        m2_global: m2GlobalN != null ? Math.round(m2GlobalN) : null,
+        vendas_consideradas: unidades.length,
+      }
+    };
+  }
+
+  // ===== âncora =====
+  // modo "equivalente": SÓ a venda mais recente ENTRE AS UNIDADES IDÊNTICAS pode ancorar.
+  // modo "legado": comportamento atual (is_ancora do SQL/agregação ou a mais recente do pool).
+  const anchor = (modo === "equivalente")
+    ? [...equivalentes].sort((a,b)=> dKey(b) - dKey(a))[0]
+    : (pool.find(v => v.is_ancora === true || v.ancora === true) ||
+       [...pool].sort((a,b)=> dKey(b) - dKey(a))[0]);
   const aV = Number(anchor.valor);
   const aD = parseDataBR(anchor.data);
 
@@ -106,15 +187,20 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const vagasAnchor = (String(anchor.unidade||"").match(/(\d+)\s*vagas?/i)||[])[1]
                    || (String(anchor.unidade||"").match(/(\d+)\s*VG/i)||[])[1];
   const ancoraCurto = `${MESES[aD.mes-1]}/${aD.ano}`;
+  const identicaTag = (modo === "equivalente") ? ` · unidade idêntica (${areaFmt(areaTotal)} m²)` : "";
+  const ancoraFrase = (modo === "equivalente")
+    ? `Ancorado na venda real de unidade IDÊNTICA em área (${areaFmt(areaTotal)} m² IPTU) do próprio prédio (ITBI)`
+    : `Ancorado na venda real do próprio prédio (ITBI)`;
 
   return {
+    ...blocoM2,
     concorrente_valor: concorrente ? milhoes(Number(concorrente.valor)) : milhoes(anuncio),
     concorrente_label: concorrente
       ? `unidade equivalente${concorrente.vagas?`, ${concorrente.vagas} vagas`:""}, já anunciada`
       : `teto pela correção monetária · IPCA ${pct(fator)}`,
     concorrente_origem: concorrente ? "anuncio" : "calculado",
     ancora_valor: milhoes(aV),
-    ancora_label: `${ancoraCurto} · mesmo prédio${vagasAnchor?` · ${vagasAnchor} vagas`:""}`,
+    ancora_label: `${ancoraCurto} · mesmo prédio${identicaTag}${vagasAnchor?` · ${vagasAnchor} vagas`:""}`,
     ancora_curto: ancoraCurto,
     ipca_pct: pct(fator),
     valor_mercado: milhoes(valorMerc),
@@ -124,14 +210,17 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     anuncio_sugerido: milhoes(anuncio),
     anuncio_sub: `${limitadoPorConc ? "alinhado ao concorrente direto" : "ancorado no ITBI corrigido pelo IPCA"} · fechamento esperado ~${mi(fechamento)}`,
     conclusao_apoio: limitadoPorConc
-      ? `Ancorado na venda real do próprio prédio (ITBI) e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(tetoConc)}).`
+      ? `${ancoraFrase} e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(tetoConc)}).`
       : (concorrente
-          ? `Ancorado na venda real do próprio prédio (ITBI) corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
-          : `Ancorado na venda real do próprio prédio (ITBI) corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`),
+          ? `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
+          : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`),
     _debug: {
+      modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
       anchor: aV, fator: +fator.toFixed(4), teto_correcao: Math.round(tetoCorrecao),
       teto_concorrencia: isFinite(tetoConc)?tetoConc:null, anuncio, fechamento: Math.round(fechamento),
-      valor_mercado: valorMerc, faixa: [faixaMin, faixaMax]
+      valor_mercado: valorMerc, faixa: [faixaMin, faixaMax],
+      m2_global: m2GlobalN != null ? Math.round(m2GlobalN) : null,
+      m2_equivalente_util: m2EqUtilN != null ? Math.round(m2EqUtilN) : null,
     }
   };
 }
