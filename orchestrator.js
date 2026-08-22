@@ -19,9 +19,11 @@ const { fetchVendidos, excluirVendidos } = require("./db");
 const { vendidosFromRows, aggregateByDate } = require("./itbi_format");
 const { buildValoracao } = require("./valoracao");
 const { buildEstudo } = require("./estudo_generator");
+const { buildDecisaoTempo } = require("./decisao_tempo");
 
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                             tipo, area_util, area_total, itbi_excluir }) {
+                             tipo, area_util, area_total, itbi_excluir,
+                             condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
   // (1b) exclusão pelo corretor (PASSO 3.5 da EVA) — no caminho "puro" (vendidosRows no body)
@@ -44,6 +46,19 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
     },
   });
 
+  // (3b) decisão no tempo (passo E): valor competitivo (venda em ~3 meses) vs segurar 12/24 meses.
+  const decisao_tempo = buildDecisaoTempo({
+    piso:          valoracao?._debug?.faixa?.[0],
+    valor_mercado: valoracao?._debug?.valor_mercado,
+    i_anual: 0.139, // CDI (ago/2026). Atualizar quando a Selic mudar (ou puxar da série do BCB).
+    condominio_mensal: Number(condominio_mensal) || 0,
+    iptu_anual:        Number(iptu_anual) || 0,
+    aluguel_mensal:    Number(aluguel_mensal) || 0,
+    reside: reside === true || /^(sim|true|1|reside|mora)$/i.test(String(reside||"")),
+    aluga:  aluga  === true || /^(sim|true|1|alugad)/i.test(String(aluga||"")) || Number(aluguel_mensal) > 0,
+    preco_alvo: Number(preco_alvo) || null,
+  });
+
   // (4) tabela do slide: formata as agregadas + marca as unidades idênticas (área IPTU exata)
   const vendidosFmt = vendidosFromRows(aggRows);
   const at = Number(area_total);
@@ -59,6 +74,7 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
     amostras: Array.isArray(amostras) ? amostras : [],
     vendidos: vendidosFmt,
     valoracao,
+    decisao_tempo,
     estudo_data: estudo_data || "",
     tipo: tipo || (imovel && imovel.tipo) || "",
     area_total: at > 0 ? at : undefined,
@@ -67,12 +83,14 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 }
 
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                                   tipo, area_util, area_total, itbi_excluir }) {
+                                   tipo, area_util, area_total, itbi_excluir,
+                                   condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                       tipo, area_util, area_total /* exclusão já aplicada no fetch; reaplicar é inócuo */ });
+                       tipo, area_util, area_total, /* exclusão já aplicada no fetch; reaplicar é inócuo */
+                       condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo });
 }
 
 module.exports = { gerarEstudo, gerarEstudoFromDB };
