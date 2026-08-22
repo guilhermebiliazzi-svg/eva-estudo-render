@@ -17,6 +17,7 @@
  */
 const pptxgen = require("pptxgenjs");
 const { vendidosAggregatedFromRows } = require("./itbi_format");
+const { addDecisaoTempoSlides } = require("./decisao_tempo_slide");
 
 const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
       INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
@@ -481,21 +482,25 @@ function buildEstudo(data, opts={}){
         {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
       s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
     } else {
-      s.addText("Valor de mercado estimado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
-      s.addText(val.valor_mercado||"",{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-      const faixaLinha = "faixa de "+(val.faixa||"")
+      const dtc = (data.decisao_tempo && data.decisao_tempo.aplicavel !== false) ? data.decisao_tempo : null;
+      s.addText("Valor competitivo de mercado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addText((dtc ? dtc.p3 : (val.valor_mercado||"")),{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+      const subLinha = "recomendado para vender em até 3 meses"
         + (val.m2_equivalente_util ? `   ·   ${val.m2_equivalente_util} útil — unidades idênticas` : "");
-      s.addText(faixaLinha,{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
+      s.addText(subLinha,{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
       s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
       s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
-      s.addText([{text:"Preço de anúncio sugerido",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
-        {text:val.anuncio_sugerido||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
-        {text:val.anuncio_sub||"",options:{fontSize:11,color:ICE}}],
+      s.addText([{text:"Valor potencial de mercado",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
+        {text:val.valor_mercado||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
+        {text:"tempo médio de venda ~12 meses — sujeito aos riscos da próxima página",options:{fontSize:11,color:ICE}}],
         {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
       s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
     }
     footer(s,13,true);
   }
+
+  // ===== DECISÃO NO TEMPO (após a Conclusão, no fim da apresentação) =====
+  addDecisaoTempoSlides(p, data, { num: 12, footerStart: 14 });
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
