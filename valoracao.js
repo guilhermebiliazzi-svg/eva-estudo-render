@@ -232,23 +232,41 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   let   anuncio       = Math.max(pisoSanidade, Math.min(anuncioBase + estadoAdj.valor, capMercado));
   const travadoPorPedido = isFinite(capMercado) && (anuncioBase + estadoAdj.valor) > capMercado;
 
-  // v3.1 · PISO PELAS VENDAS RECENTES: se unidades IDÊNTICAS fecharam nos últimos 12 meses,
-  // o anúncio nunca cai abaixo da média das 2 mais recentes × 0,90 — fechamento real (ITBI)
-  // é evidência mais forte que preço pedido de concorrente.
+  // v3.2 · VENDAS RECENTES ANCORAM O FECHAMENTO (não o anúncio).
+  // Venda de ITBI JÁ É fechamento — aplicar o deságio pedido→fechamento sobre ela
+  // descontaria a mesma negociação duas vezes (bug v3.1: média × 0,90 × 0,95 = −14,5%).
+  // Regra: fechamento esperado nunca fica abaixo da média das 2 vendas idênticas mais
+  // recentes (≤12 meses), cada uma corrigida pelo IPCA até hoje, ajustada UMA vez pelo
+  // estado do avaliado (desconto de estado se declarado; margem de 5% se estado desconhecido).
   const mesesDesde = v => { const d = parseDataBR(v.data); return (anoRef - d.ano) * 12 + (mesRef - d.mes); };
   const vendasRecentes = (modo === "equivalente")
     ? [...equivalentes].filter(v => mesesDesde(v) <= 12).sort((a,b) => dKey(b) - dKey(a)).slice(0, 2)
     : [];
-  const pisoVendas = vendasRecentes.length
-    ? (vendasRecentes.reduce((s,v) => s + Number(v.valor), 0) / vendasRecentes.length) * 0.90
+  const vendaCorrigida = v => { const d = parseDataBR(v.data); return Number(v.valor) * ipcaFactor(d.ano, d.mes, anoRef, mesRef); };
+  const mediaVendasCorr = vendasRecentes.length
+    ? vendasRecentes.reduce((s,v) => s + vendaCorrigida(v), 0) / vendasRecentes.length
     : 0;
-  const elevadoPorVendas = pisoVendas > anuncio;
-  anuncio = Math.max(anuncio, pisoVendas);
+  const estadoDeclarado = !!(opts.estado || opts.reforma_ano || opts.reforma_padrao);
+  // premium de reforma não infla o piso (o piso é evidência de mercado, não de acabamento);
+  // só o DESCONTO de estado entra — o comprador precifica a obra da unidade avaliada.
+  const pisoFechamento = mediaVendasCorr > 0
+    ? mediaVendasCorr + (estadoDeclarado ? Math.min(estadoAdj.valor, 0) : -mediaVendasCorr * 0.05)
+    : 0;
 
   // 5) fechamento, valor de mercado e faixa
-  const fechamento  = anuncio * (1 - desagio);
-  const valorMerc   = roundTo((fechamento + anuncio)/2, passo);
+  let fechamento = anuncio * (1 - desagio);
+  const elevadoPorVendas = pisoFechamento > fechamento;
+  if (elevadoPorVendas) {
+    fechamento = pisoFechamento;
+    // anúncio recomposto a partir do fechamento; teto = maior evidência corrigida disponível
+    const capAnuncioVendas = Math.max(tetoCorrecao, ...vendasRecentes.map(vendaCorrigida));
+    anuncio = Math.max(fechamento, Math.min(fechamento / (1 - desagio), capAnuncioVendas));
+  }
   const faixaMin    = floorTo(fechamento, passo);
+  // v3.3 · trava do pedido: anúncio no máximo 5% acima do valor competitivo
+  // (pedido descolado do preço de venda espanta comprador; nunca abaixo do fechamento esperado)
+  if (anuncio > faixaMin * 1.05) anuncio = Math.max(fechamento, faixaMin * 1.05);
+  const valorMerc   = roundTo((fechamento + anuncio)/2, passo);
   const faixaMax    = anuncio;
 
   // labels
@@ -284,7 +302,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
-      + (elevadoPorVendas ? ` Sustentado pelas vendas reais recentes de unidades idênticas (média das ${vendasRecentes.length === 1 ? "última" : "2 últimas"} × 0,90 = ${milhoes(pisoVendas)}) — fechamentos do ITBI valem mais que preços pedidos.` : ""),
+      + (elevadoPorVendas ? ` Fechamento ancorado nas ${vendasRecentes.length === 1 ? "venda idêntica mais recente" : "2 vendas idênticas mais recentes"}: média corrigida pelo IPCA (${milhoes(mediaVendasCorr)})${estadoDeclarado && estadoAdj.valor < 0 ? " menos o desconto de estado" : (!estadoDeclarado ? " com margem de 5% (estado não informado)" : "")} = ${milhoes(pisoFechamento)} — fechado no ITBI vale mais que preço pedido.` : ""),
     estado_frase: estadoAdj.frase,
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
@@ -295,7 +313,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       menor_pedido_similar: isFinite(menorPedido)?menorPedido:null,
       amostras_similares: similares.length,
       travado_por_pedido: travadoPorPedido,
-      piso_vendas: Math.round(pisoVendas),
+      media_vendas_corrigida: Math.round(mediaVendasCorr),
+      piso_fechamento_vendas: Math.round(pisoFechamento),
       elevado_por_vendas: elevadoPorVendas,
       anuncio, fechamento: Math.round(fechamento),
       valor_mercado: valorMerc, faixa: [faixaMin, faixaMax],
