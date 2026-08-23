@@ -254,7 +254,26 @@ function buildEstudo(data, opts={}){
     const head=["Imóvel","Bairro","Área",(isComercial?"Banh.":"Suítes"),"Vagas","Pedido","R$/m²"].map(hdr);
     const cell=(t,o={})=>({text:String(t),options:{fontSize:11,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,...o}});
     const lk=(u)=>u?({hyperlink:{url:u,tooltip:"Abrir anúncio"},color:LINK,underline:true}):{};
-    const amostras = data.amostras||[];
+    const amostrasRaw = data.amostras||[];
+    // v3 · saneamento: o "avaliando" pode chegar com pedido numérico cru e sem R$/m² —
+    // formata dinheiro, calcula R$/m² quando possível e nunca imprime "undefined".
+    const brl = n => { n=Number(n); if(!(n>0)) return "";
+      if(n>=1e6){ let s=(n/1e6).toFixed(2); if(s.endsWith("0")) s=s.slice(0,-1); return "R$ "+s.replace(".",",")+" mi"; }
+      return "R$ "+String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,"."); };
+    const digits = v => { const m=String(v==null?"":v).replace(/[^\d]/g,""); return m?Number(m):0; };
+    const amostras = amostrasRaw.map(a=>{
+      const out={...a};
+      if (/^\s*\d+([.,]\d+)?\s*$/.test(String(out.pedido??""))) out.pedido = brl(out.pedido);
+      if (out.pedido==null || out.pedido==="" || out.pedido==="undefined") out.pedido = "sob consulta";
+      const vm = String(out.valor_m2??"");
+      if (!vm || vm==="undefined" || vm==="null" || vm==="NaN"){
+        const val = Number(out.valor) || digits(out.pedido);
+        const ar  = digits(out.area);
+        out.valor_m2 = (val>0 && ar>0) ? String(Math.round(val/ar)).replace(/\B(?=(\d{3})+(?!\d))/g,".") : "—";
+      }
+      if (out.area!=null && /^\s*\d+([.,]\d+)?\s*$/.test(String(out.area))) out.area = String(out.area)+" m²";
+      return out;
+    });
     const rows = amostras.map(a=>{
       const fill = a.tipo==="avaliando" ? {color:ICETINT} : a.tipo==="mesmo_predio" ? {color:REDTINT} : undefined;
       const boldName = a.tipo==="avaliando"||a.tipo==="mesmo_predio";
@@ -263,8 +282,12 @@ function buildEstudo(data, opts={}){
       return [cell(a.nome,nameOpts),c(a.bairro),c(a.area),c(a.suites),c(a.vagas),
         cell(a.pedido, {...(fill?{fill}:{}), bold:boldName}), c(a.valor_m2)];
     });
+    // v3 · altura adaptativa: com muitas amostras a tabela encolhe em vez de invadir o rodapé
+    const nRows = rows.length + 1; // + header
+    const rowHAd = nRows <= 6 ? 0.5 : nRows <= 8 ? 0.38 : 0.3;
     s.addTable([head,...rows],{x:MX,y:1.75,w:8.9,colW:[2.5,1.25,0.95,0.85,0.85,1.3,1.2],
-      border:{type:"solid",color:LINE,pt:0.75},rowH:0.5,valign:"middle",fontFace:BODY,autoPage:false});
+      border:{type:"solid",color:LINE,pt:0.75},rowH:rowHAd,valign:"middle",fontFace:BODY,autoPage:false});
+    const tabelaFim = 1.75 + nRows*rowHAd;
     const mp = amostras.filter(a=>a.tipo==="mesmo_predio");
     let nota;
     if(mp.length){
@@ -278,7 +301,8 @@ function buildEstudo(data, opts={}){
     } else {
       nota=[{text:data.amostras_nota||"Comparáveis ativos do mesmo perfil.",options:{color:INK}}];
     }
-    s.addText(nota,{x:MX,y:4.8,w:8.9,h:0.5,fontFace:BODY,fontSize:11,align:"left",valign:"middle",margin:0});
+    const notaY = Math.max(4.55, Math.min(4.85, tabelaFim + 0.08));
+    if (tabelaFim <= 4.85) s.addText(nota,{x:MX,y:notaY,w:8.9,h:0.42,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0});
     footer(s,9);
   }
 
