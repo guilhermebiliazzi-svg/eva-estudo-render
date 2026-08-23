@@ -276,7 +276,10 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     const capAnuncioVendas = Math.max(tetoCorrecao, ...vendasRecentes.map(vendaCorrigida));
     anuncio = Math.max(fechamento, Math.min(fechamento / (1 - desagio), capAnuncioVendas));
   }
-  const faixaMin    = floorTo(fechamento, passo);
+  // v3.4.1 · competitivo arredonda para o passo MAIS PRÓXIMO (não mais para baixo):
+  // fechamento de 1.349.991 não pode virar 1,30 enquanto 1.350.824 vira 1,35 —
+  // R$ 833 de diferença de média de amostras não pode valer um degrau de R$ 50 mil.
+  const faixaMin    = roundTo(fechamento, passo);
   // v3.3 · trava do pedido: anúncio no máximo 5% acima do valor competitivo
   // (pedido descolado do preço de venda espanta comprador; nunca abaixo do fechamento esperado)
   if (anuncio > faixaMin * 1.05) anuncio = Math.max(fechamento, faixaMin * 1.05);
