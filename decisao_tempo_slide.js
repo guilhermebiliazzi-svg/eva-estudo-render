@@ -55,6 +55,11 @@ function addDecisaoTempoSlides(p, data, opts={}){
     const worst = c.perdas[c.perdas.length-1];
     return { best, worst };
   };
+  // v2 · matemática honesta: se algum "melhor caso" supera vender agora, o slide não pode mentir
+  const shown = cenarios.slice(0,2).flatMap(c=>{ const {best,worst}=pick(c); return [best,worst]; });
+  const maxVp = Math.max(P3, ...shown.map(x=>x._vp||0));
+  const holdBeats = shown.some(x=>(x._dvp||((x._vp||0)-P3)) > 0);   // melhor caso paga mais que vender agora
+  const dstr = x => x.vp_vs_agora_signed || ((((x._vp||0)-P3)>=0?"+":"−") + x.vp_vs_agora);
 
   // ================= SLIDE A — RECOMENDAÇÃO + GRÁFICO =================
   { const s=p.addSlide(); s.background={color:WHITE};
@@ -72,19 +77,27 @@ function addDecisaoTempoSlides(p, data, opts={}){
     s.addShape(p.shapes.RECTANGLE,{x:MX,y:tY,w:0.08,h:tH,fill:{color:GREEN},line:{type:"none"}});
     s.addShape(p.shapes.OVAL,{x:MX+0.22,y:tY+0.15,w:0.26,h:0.26,fill:{color:GREEN},line:{type:"none"}});
     s.addText("✓",{x:MX+0.22,y:tY+0.15,w:0.26,h:0.26,fontFace:BODY,fontSize:13,color:WHITE,bold:true,align:"center",valign:"middle",margin:0});
-    s.addText([
-      {text:"Vender pelo valor competitivo é o que deixa mais dinheiro no seu bolso. ",options:{color:GREEN,bold:true}},
-      {text:"Segurar para tentar um valor maior entrega menos — mesmo no melhor cenário — porque o dinheiro deixa de render e os custos correm.",options:{color:NAVY}},
-    ],{x:MX+0.62,y:tY,w:8.15,h:tH,fontFace:BODY,fontSize:12,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.05});
+    const bannerRuns = holdBeats
+      ? [
+          {text:"Vender pelo valor competitivo é o caminho de MENOR RISCO. ",options:{color:GREEN,bold:true}},
+          {text:`Segurar só compensa SE o fechamento realmente sair pelo ${alvoDono?"preço do proprietário":"valor potencial"} — um preço que o mercado ainda não pagou. Se encalhar, a perda é certa e cresce a cada mês.`,options:{color:NAVY}},
+        ]
+      : [
+          {text:"Vender pelo valor competitivo é o que deixa mais dinheiro no seu bolso. ",options:{color:GREEN,bold:true}},
+          {text:"Segurar para tentar um valor maior entrega menos — mesmo no melhor cenário — porque o dinheiro deixa de render e os custos correm.",options:{color:NAVY}},
+        ];
+    s.addText(bannerRuns,{x:MX+0.62,y:tY,w:8.15,h:tH,fontFace:BODY,fontSize:12,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.05});
 
     // ---- gráfico ----
-    s.addText("O QUE SOBRA PRA VOCÊ, EM DINHEIRO DE HOJE  ·  BARRA MAIOR = MELHOR ESCOLHA",
+    s.addText(holdBeats
+      ? "O QUE SOBRA PRA VOCÊ, EM DINHEIRO DE HOJE  ·  BARRAS ROSAS DEPENDEM DE FECHAR O PREÇO"
+      : "O QUE SOBRA PRA VOCÊ, EM DINHEIRO DE HOJE  ·  BARRA MAIOR = MELHOR ESCOLHA",
       {x:MX,y:2.2,w:8.9,h:0.26,fontFace:BODY,fontSize:10,color:NAVY,bold:true,charSpacing:1.2,align:"left",valign:"middle",margin:0});
 
     const labX=MX, labW=2.35;          // rótulo (dir.)
     const barX=3.05, maxW=5.05;        // barras
     const barH=0.28;
-    const scale = v => Math.max(0.04, maxW * (v / P3));
+    const scale = v => Math.max(0.04, Math.min(maxW, maxW * (v / maxVp)));
 
     function bar(y, {vpNum, vpStr, labelMain, labelSub, fill, delta, badge}){
       // rótulo à direita
@@ -101,15 +114,16 @@ function addDecisaoTempoSlides(p, data, opts={}){
         s.addShape(p.shapes.ROUNDED_RECTANGLE,{x:barX+w+0.1,y:y+0.02,w:1.35,h:barH-0.04,fill:{color:GREEN},line:{type:"none"},rectRadius:0.11});
         s.addText(badge,{x:barX+w+0.1,y:y+0.02,w:1.35,h:barH-0.04,fontFace:BODY,fontSize:9,color:WHITE,bold:true,charSpacing:1,align:"center",valign:"middle",margin:0});
       } else if (delta){
-        s.addText(delta,{x:barX+w+0.1,y:y,w:1.4,h:barH,fontFace:BODY,fontSize:10.5,color:MUTED,bold:true,align:"left",valign:"middle",margin:0});
+        const dc = delta.startsWith("+") ? GREEN : MUTED;
+        s.addText(delta,{x:barX+w+0.1,y:y,w:1.4,h:barH,fontFace:BODY,fontSize:10.5,color:dc,bold:true,align:"left",valign:"middle",margin:0});
       }
     }
     function grouplab(y, txt){
       s.addText(txt.toUpperCase(),{x:barX,y:y,w:maxW+1.4,h:0.2,fontFace:BODY,fontSize:9,color:MUTED,bold:true,charSpacing:1,align:"left",valign:"middle",margin:0});
     }
 
-    // vencedora
-    bar(2.5, {vpNum:P3, vpStr:dt.vender_agora_vp, labelMain:"VALOR COMPETITIVO", labelSub:`venda em até 3 meses · ${dt.p3}`, fill:GREEN, badge:"MELHOR OPÇÃO"});
+    // vender agora (verde) — selo honesto: melhor opção OU menor risco
+    bar(2.5, {vpNum:P3, vpStr:dt.vender_agora_vp, labelMain:"VALOR COMPETITIVO", labelSub:`venda em até 3 meses · ${dt.p3}`, fill:GREEN, badge: holdBeats ? "MENOR RISCO" : "MELHOR OPÇÃO"});
 
     let y=2.98;
     cenarios.slice(0,2).forEach((c,i)=>{
@@ -117,9 +131,10 @@ function addDecisaoTempoSlides(p, data, opts={}){
       grouplab(y, `Segurar ${c.meses} meses (${mesesMais} a mais) para tentar um preço maior`);
       y+=0.24;
       const {best,worst}=pick(c);
-      bar(y, {vpNum:best._vp, vpStr:best.vp, labelMain:`melhor caso — ${alvoShort}`, labelSub:best.preco, fill:ROSE, delta:"−"+best.vp_vs_agora.replace(/^R\$/,"R$")});
+      const bestExtra = ((best._dvp||0) > 0) ? " (se fechar)" : "";
+      bar(y, {vpNum:best._vp, vpStr:best.vp, labelMain:`melhor caso — ${alvoShort}${bestExtra}`, labelSub:best.preco, fill:ROSE, delta:dstr(best)});
       y+=0.4;
-      bar(y, {vpNum:worst._vp, vpStr:worst.vp, labelMain:"se encalhar e baixar 10%", labelSub:worst.preco, fill:RED, delta:"−"+worst.vp_vs_agora});
+      bar(y, {vpNum:worst._vp, vpStr:worst.vp, labelMain:"se encalhar e baixar 10%", labelSub:worst.preco, fill:RED, delta:dstr(worst)});
       y+=0.46;
     });
 
@@ -158,7 +173,8 @@ function addDecisaoTempoSlides(p, data, opts={}){
           cell(`Segurar ${c.meses}m — ${shortByKey(pd.key)}`,{align:"left",fill:f}),
           cell(pd.preco,{fill:f}),
           cell(pd.vp,{fill:f,bold:true}),
-          cell("−"+pd.vp_vs_agora,{fill:f,color:RED,bold:pior}),
+          cell((pd.vp_vs_agora_signed || "−"+pd.vp_vs_agora),
+               {fill:f,color:((pd._dvp||0)>0 ? GREEN : RED),bold:pior}),
         ]);
       });
     });
