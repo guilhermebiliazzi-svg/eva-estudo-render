@@ -198,6 +198,14 @@ function buildDecisaoTempo({
       "o proprietário já perdeu todo o custo de esperar; se fechar abaixo do piso, a perda cresce na mesma proporção do desconto.",
     _debug: {
       regime, P3, im: +im.toFixed(6), i_anual_efetiva: +iaEff.toFixed(4),
+      alvo: alvoEff != null ? Math.round(alvoEff) : null,
+      valor_mercado: (valor_mercado != null && Number(valor_mercado) > 0) ? Math.round(Number(valor_mercado)) : null,
+      // régua dos cards (Pareto 80%): intermediário = competitivo +5%, superotimista = +15%,
+      // arredondados no passo de R$ 25 mil (regra Guilherme, 23/08/2026)
+      valor_intermediario: Math.round(P3 * 1.05 / 25e3) * 25e3,
+      valor_superotimista: Math.round(P3 * 1.15 / 25e3) * 25e3,
+      meses_rapida,
+      horizontes: horizontes.slice(),
       custo_carreg_mensal: Math.round(custoCarregMensal),
       cenarios: cenarios.map(c => ({ meses: c.meses, ...Object.fromEntries(Object.entries(c._n).map(([k,v]) => [k, v==null?null:Math.round(v)])) })),
     }
