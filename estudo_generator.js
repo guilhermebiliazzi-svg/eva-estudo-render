@@ -514,7 +514,7 @@ function buildEstudo(data, opts={}){
         {text:`m² global × ${areaTotalRef!=null?areaFmt(areaTotalRef):"—"} m² (área total IPTU)`,options:{fontSize:18,color:WHITE,bold:true,breakLine:true}},
         {text:"leitura de referência — não é preço sugerido",options:{fontSize:11,color:ICE}}],
         {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.32,w:2.95,h:1.95,fontFace:BODY,fontSize:((val.conclusao_apoio||"").length>520?9:(val.conclusao_apoio||"").length>420?10:11.5),color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.18});
     } else {
       const dtc = (data.decisao_tempo && data.decisao_tempo.aplicavel !== false) ? data.decisao_tempo : null;
       s.addText("Valor competitivo de mercado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
@@ -528,7 +528,7 @@ function buildEstudo(data, opts={}){
         {text:val.valor_mercado||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
         {text:"tempo médio de venda ~12 meses — sujeito aos riscos da próxima página",options:{fontSize:11,color:ICE}}],
         {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+      s.addText(val.conclusao_apoio||"",{x:6.5,y:3.32,w:2.95,h:1.95,fontFace:BODY,fontSize:((val.conclusao_apoio||"").length>520?9:(val.conclusao_apoio||"").length>420?10:11.5),color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.18});
     }
     footer(s,13,true);
   }
