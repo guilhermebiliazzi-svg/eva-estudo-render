@@ -215,14 +215,35 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     reforma_ano: opts.reforma_ano, reforma_padrao: opts.reforma_padrao,
     estado: opts.estado, areaUtil, anoRef,
   });
-  // teto de mercado: menor PEDIDO entre TODOS os anúncios ativos (mesmo prédio + comparáveis).
+  // v3.1 · teto de mercado: menor PEDIDO entre anúncios de ÁREA SIMILAR (±10% da área útil).
+  // Comparar preço ABSOLUTO com unidade menor derruba o valor indevidamente (ex.: 84 m² vs 92 m²).
   // Reformado pode encostar no menor pedido; caso contrário fica 5% abaixo dele.
-  const pedidosAtivos = amostras.map(a => Number(a.valor)).filter(v => v > 0);
+  const areaNumDe = a => { const m = String(a.area ?? "").match(/[\d.,]+/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
+  const similares = amostras.filter(a => {
+    if (!(Number(a.valor) > 0) || a.tipo === "avaliando") return false;
+    if (!areaUtil) return true;               // sem área útil: mantém comportamento amplo
+    const ar = areaNumDe(a);
+    return ar > 0 && Math.abs(ar - areaUtil) <= areaUtil * 0.10;
+  });
+  const pedidosAtivos = similares.map(a => Number(a.valor));
   const menorPedido   = pedidosAtivos.length ? Math.min(...pedidosAtivos) : Infinity;
   const capMercado    = isFinite(menorPedido) ? (estadoAdj.valor > 0 ? menorPedido : menorPedido * 0.95) : Infinity;
   const pisoSanidade  = anuncioBase * 0.8; // desconto de estado nunca derruba mais de 20% da base
   let   anuncio       = Math.max(pisoSanidade, Math.min(anuncioBase + estadoAdj.valor, capMercado));
   const travadoPorPedido = isFinite(capMercado) && (anuncioBase + estadoAdj.valor) > capMercado;
+
+  // v3.1 · PISO PELAS VENDAS RECENTES: se unidades IDÊNTICAS fecharam nos últimos 12 meses,
+  // o anúncio nunca cai abaixo da média das 2 mais recentes × 0,90 — fechamento real (ITBI)
+  // é evidência mais forte que preço pedido de concorrente.
+  const mesesDesde = v => { const d = parseDataBR(v.data); return (anoRef - d.ano) * 12 + (mesRef - d.mes); };
+  const vendasRecentes = (modo === "equivalente")
+    ? [...equivalentes].filter(v => mesesDesde(v) <= 12).sort((a,b) => dKey(b) - dKey(a)).slice(0, 2)
+    : [];
+  const pisoVendas = vendasRecentes.length
+    ? (vendasRecentes.reduce((s,v) => s + Number(v.valor), 0) / vendasRecentes.length) * 0.90
+    : 0;
+  const elevadoPorVendas = pisoVendas > anuncio;
+  anuncio = Math.max(anuncio, pisoVendas);
 
   // 5) fechamento, valor de mercado e faixa
   const fechamento  = anuncio * (1 - desagio);
@@ -241,7 +262,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
 
   return {
     ...blocoM2,
-    concorrente_valor: concorrente ? milhoes(Number(concorrente.valor)) : milhoes(anuncio),
+    concorrente_valor: concorrente ? milhoes(Number(concorrente.valor)) : milhoes(tetoCorrecao),
     concorrente_label: concorrente
       ? `unidade equivalente${concorrente.vagas?`, ${concorrente.vagas} vagas`:""}, já anunciada`
       : `teto pela correção monetária · IPCA ${pct(fator)}`,
@@ -262,7 +283,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
           ? `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
-      + (travadoPorPedido ? ` Valor limitado pelo menor anúncio concorrente ativo (${milhoes(menorPedido)}) para manter a competitividade.` : ""),
+      + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
+      + (elevadoPorVendas ? ` Sustentado pelas vendas reais recentes de unidades idênticas (média das ${vendasRecentes.length === 1 ? "última" : "2 últimas"} × 0,90 = ${milhoes(pisoVendas)}) — fechamentos do ITBI valem mais que preços pedidos.` : ""),
     estado_frase: estadoAdj.frase,
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
@@ -270,8 +292,11 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       teto_concorrencia: isFinite(tetoConc)?tetoConc:null,
       anuncio_base: Math.round(anuncioBase),
       estado_ajuste: Math.round(estadoAdj.valor),
-      menor_pedido_ativo: isFinite(menorPedido)?menorPedido:null,
+      menor_pedido_similar: isFinite(menorPedido)?menorPedido:null,
+      amostras_similares: similares.length,
       travado_por_pedido: travadoPorPedido,
+      piso_vendas: Math.round(pisoVendas),
+      elevado_por_vendas: elevadoPorVendas,
       anuncio, fechamento: Math.round(fechamento),
       valor_mercado: valorMerc, faixa: [faixaMin, faixaMax],
       m2_global: m2GlobalN != null ? Math.round(m2GlobalN) : null,
