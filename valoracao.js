@@ -60,6 +60,39 @@ function parseDataBR(d){ // "19/12/2023" ou Date/ISO -> {ano,mes}
   const x = new Date(d); return { ano:x.getUTCFullYear(), mes:x.getUTCMonth()+1 };
 }
 
+// ===== v3 · ESTADO/REFORMA — custo de obra por m² (área útil), valores de hoje =====
+// Calibração travada com o Guilherme (ago/2026): reforma completa/alto padrão não sai
+// por menos de R$3.000/m². Depreciação LINEAR EM 10 ANOS (uso consome a reforma).
+const CUSTO_REFORMA_M2 = { simples: 1400, media: 2300, completa: 3000 };
+const DEPRECIACAO_ANOS = 10;
+
+function ajusteEstado({ reforma_ano, reforma_padrao, estado, areaUtil, anoRef }){
+  // retorna { valor, frase } — valor >0 (prêmio de reforma) ou <0 (desconto de estado original)
+  if (!areaUtil) return { valor: 0, frase: "" };
+  const padrao = String(reforma_padrao||"").toLowerCase();
+  const custoM2 = CUSTO_REFORMA_M2[padrao] ?? null;
+  const anoRf = Number(reforma_ano) || null;
+  if (anoRf && custoM2) {
+    const idade = Math.max(0, anoRef - anoRf);
+    const fator = Math.max(0, 1 - idade/DEPRECIACAO_ANOS);
+    if (fator <= 0) return { valor: 0, frase: "" };
+    const premio = custoM2 * areaUtil * fator;
+    return {
+      valor: premio,
+      frase: `Reforma ${padrao} (${anoRf}) incorporada: +${mi(premio)} — custo de obra ~R$ ${milhar(custoM2)}/m² sobre ${areaFmt(areaUtil)} m² úteis, depreciado pelo uso (${Math.round(fator*100)}% após ${idade} ano${idade===1?"":"s"}).`
+    };
+  }
+  if (String(estado||"").toLowerCase() === "original") {
+    // 10+ anos sem reforma / estado datado: comprador precifica a obra (60% do custo de atualização padrão médio)
+    const desconto = CUSTO_REFORMA_M2.media * areaUtil * 0.6;
+    return {
+      valor: -desconto,
+      frase: `Estado original/datado: desconto de ${mi(desconto)} (~60% do custo de atualização de R$ ${milhar(CUSTO_REFORMA_M2.media)}/m² sobre ${areaFmt(areaUtil)} m² úteis) — o comprador precifica a obra.`
+    };
+  }
+  return { valor: 0, frase: "" }; // "bom"/conservado/sem info → estado típico da âncora (neutro)
+}
+
 function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const desagio   = opts.desagio ?? 0.05;   // pedido -> fechamento
   const hoje      = new Date();
@@ -172,10 +205,24 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     ? mesmoPredio.reduce((m,a)=> Number(a.valor) < Number(m.valor) ? a : m)
     : null;
 
-  // 4) preço de anúncio sugerido
-  const anuncio = opts.anuncio_override ?? Math.min(tetoConc, tetoCorrecao);
+  // 4) preço de anúncio sugerido (base, estado típico)
+  const anuncioBase = opts.anuncio_override ?? Math.min(tetoConc, tetoCorrecao);
   // quem realmente travou o preço: concorrência só limita se estiver <= teto de correção
   const limitadoPorConc = isFinite(tetoConc) && tetoConc <= tetoCorrecao;
+
+  // 4b) v3 · ajuste de ESTADO/REFORMA sobre a base + travas de mercado (não descola)
+  const estadoAdj = ajusteEstado({
+    reforma_ano: opts.reforma_ano, reforma_padrao: opts.reforma_padrao,
+    estado: opts.estado, areaUtil, anoRef,
+  });
+  // teto de mercado: menor PEDIDO entre TODOS os anúncios ativos (mesmo prédio + comparáveis).
+  // Reformado pode encostar no menor pedido; caso contrário fica 5% abaixo dele.
+  const pedidosAtivos = amostras.map(a => Number(a.valor)).filter(v => v > 0);
+  const menorPedido   = pedidosAtivos.length ? Math.min(...pedidosAtivos) : Infinity;
+  const capMercado    = isFinite(menorPedido) ? (estadoAdj.valor > 0 ? menorPedido : menorPedido * 0.95) : Infinity;
+  const pisoSanidade  = anuncioBase * 0.8; // desconto de estado nunca derruba mais de 20% da base
+  let   anuncio       = Math.max(pisoSanidade, Math.min(anuncioBase + estadoAdj.valor, capMercado));
+  const travadoPorPedido = isFinite(capMercado) && (anuncioBase + estadoAdj.valor) > capMercado;
 
   // 5) fechamento, valor de mercado e faixa
   const fechamento  = anuncio * (1 - desagio);
@@ -209,15 +256,23 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       : `${reais(faixaMin)} a ${reaisN(faixaMax)}`,
     anuncio_sugerido: milhoes(anuncio),
     anuncio_sub: `${limitadoPorConc ? "alinhado ao concorrente direto" : "ancorado no ITBI corrigido pelo IPCA"} · fechamento esperado ~${mi(fechamento)}`,
-    conclusao_apoio: limitadoPorConc
+    conclusao_apoio: (limitadoPorConc
       ? `${ancoraFrase} e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(tetoConc)}).`
       : (concorrente
           ? `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
-          : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`),
+          : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
+      + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
+      + (travadoPorPedido ? ` Valor limitado pelo menor anúncio concorrente ativo (${milhoes(menorPedido)}) para manter a competitividade.` : ""),
+    estado_frase: estadoAdj.frase,
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
       anchor: aV, fator: +fator.toFixed(4), teto_correcao: Math.round(tetoCorrecao),
-      teto_concorrencia: isFinite(tetoConc)?tetoConc:null, anuncio, fechamento: Math.round(fechamento),
+      teto_concorrencia: isFinite(tetoConc)?tetoConc:null,
+      anuncio_base: Math.round(anuncioBase),
+      estado_ajuste: Math.round(estadoAdj.valor),
+      menor_pedido_ativo: isFinite(menorPedido)?menorPedido:null,
+      travado_por_pedido: travadoPorPedido,
+      anuncio, fechamento: Math.round(fechamento),
       valor_mercado: valorMerc, faixa: [faixaMin, faixaMax],
       m2_global: m2GlobalN != null ? Math.round(m2GlobalN) : null,
       m2_equivalente_util: m2EqUtilN != null ? Math.round(m2EqUtilN) : null,
