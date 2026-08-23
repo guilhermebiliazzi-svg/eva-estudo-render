@@ -16,6 +16,7 @@
  * comps[] já formatados (strings): { data, endereco, area_terreno, area_construida, valor, rs_m2_terreno, dist }
  */
 const pptxgen = require("pptxgenjs");
+const { addDecisaoTempoSlides } = require("./decisao_tempo_slide");
 
 const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
       INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
@@ -366,6 +367,9 @@ function buildEstudoCasa(data, opts={}){
     s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
     footer(s,13,true);
   }
+
+  // ===== DECISÃO NO TEMPO (mesmos 3 slides do apartamento; no-op sem decisao_tempo) =====
+  addDecisaoTempoSlides(p, data, { num: 12, footerStart: 14 });
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
