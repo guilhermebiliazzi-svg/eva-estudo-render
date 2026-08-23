@@ -130,12 +130,14 @@ function buildDecisaoTempo({
     const perdas = fechamentos.map(f => {
       const valorFV = preco_equilibrio - f.preco;           // perda capitalizada (valor futuro), >0 ⇒ prejuízo
       const vp = P3 - valorFV / disc;                        // o que sobra, em dinheiro de HOJE
+      const dvp = vp - P3;                                   // >0 ⇒ estratégia rende MAIS que vender agora
       return {
         key: f.key, cenario: f.cenario, label: f.label, preco: milhoes(f.preco),
         perda: valorFV > 0 ? milhoes(valorFV) : "sem perda",
         vp: milhoes(vp),                                     // valor presente da estratégia de esperar
-        vp_vs_agora: milhoes(P3 - vp),                       // quanto a menos que vender agora (em R$ de hoje)
-        _perda: Math.round(valorFV), _vp: Math.round(vp),
+        vp_vs_agora: milhoes(P3 - vp),                       // legado (módulo, sem sinal) — manter compat
+        vp_vs_agora_signed: (dvp >= 0 ? "+" : "−") + milhoes(Math.abs(dvp)), // com sinal correto
+        _perda: Math.round(valorFV), _vp: Math.round(vp), _dvp: Math.round(dvp),
       };
     });
 
