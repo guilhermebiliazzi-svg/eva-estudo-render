@@ -23,7 +23,8 @@ const { buildDecisaoTempo } = require("./decisao_tempo");
 
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                              tipo, area_util, area_total, itbi_excluir,
-                             condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo }) {
+                             condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                             reforma_ano, reforma_padrao, estado }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
   // (1b) exclusão pelo corretor (PASSO 3.5 da EVA) — no caminho "puro" (vendidosRows no body)
@@ -43,6 +44,10 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
       area_total: area_total != null ? Number(area_total) : undefined,
       area_util:  area_util  != null ? Number(area_util)  : undefined,
       tipo,
+      // v3 · estado/reforma (prêmio depreciado 10 anos / desconto p/ original) — ver valoracao.js
+      reforma_ano:   reforma_ano   != null && reforma_ano   !== "" ? Number(reforma_ano) : undefined,
+      reforma_padrao: reforma_padrao || undefined,
+      estado:         estado || undefined,
     },
   });
 
@@ -84,13 +89,15 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
                                    tipo, area_util, area_total, itbi_excluir,
-                                   condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo }) {
+                                   condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                                   reforma_ano, reforma_padrao, estado }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                        tipo, area_util, area_total, /* exclusão já aplicada no fetch; reaplicar é inócuo */
-                       condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo });
+                       condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                       reforma_ano, reforma_padrao, estado });
 }
 
 module.exports = { gerarEstudo, gerarEstudoFromDB };
