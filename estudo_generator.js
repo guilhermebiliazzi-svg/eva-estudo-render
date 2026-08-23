@@ -261,15 +261,25 @@ function buildEstudo(data, opts={}){
       if(n>=1e6){ let s=(n/1e6).toFixed(2); if(s.endsWith("0")) s=s.slice(0,-1); return "R$ "+s.replace(".",",")+" mi"; }
       return "R$ "+String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,"."); };
     const digits = v => { const m=String(v==null?"":v).replace(/[^\d]/g,""); return m?Number(m):0; };
+    // dinheiro em qualquer formato: 700000 · "R$ 700.000" · "R$ 1,45 mi" · "1,45 milhões"
+    const money = v => {
+      if (typeof v === "number") return v;
+      const s = String(v ?? "");
+      const mm = s.match(/([\d.,]+)\s*(mi|milh)/i);
+      if (mm) return Math.round(parseFloat(mm[1].replace(/\./g,"").replace(",",".")) * 1e6);
+      return digits(s);
+    };
     const amostras = amostrasRaw.map(a=>{
       const out={...a};
       if (/^\s*\d+([.,]\d+)?\s*$/.test(String(out.pedido??""))) out.pedido = brl(out.pedido);
       if (out.pedido==null || out.pedido==="" || out.pedido==="undefined") out.pedido = "sob consulta";
       const vm = String(out.valor_m2??"");
       if (!vm || vm==="undefined" || vm==="null" || vm==="NaN"){
-        const val = Number(out.valor) || digits(out.pedido);
+        const val = Number(out.valor) || money(out.pedido);
         const ar  = digits(out.area);
-        out.valor_m2 = (val>0 && ar>0) ? String(Math.round(val/ar)).replace(/\B(?=(\d{3})+(?!\d))/g,".") : "—";
+        const pm2 = (val>0 && ar>0) ? val/ar : 0;
+        out.valor_m2 = (pm2 >= 1000 && pm2 <= 100000)
+          ? String(Math.round(pm2)).replace(/\B(?=(\d{3})+(?!\d))/g,".") : "—";
       }
       if (out.area!=null && /^\s*\d+([.,]\d+)?\s*$/.test(String(out.area))) out.area = String(out.area)+" m²";
       return out;
