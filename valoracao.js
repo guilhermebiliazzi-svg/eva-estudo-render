@@ -246,11 +246,25 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const mediaVendasCorr = vendasRecentes.length
     ? vendasRecentes.reduce((s,v) => s + vendaCorrigida(v), 0) / vendasRecentes.length
     : 0;
-  const estadoDeclarado = !!(opts.estado || opts.reforma_ano || opts.reforma_padrao);
-  // premium de reforma não infla o piso (o piso é evidência de mercado, não de acabamento);
-  // só o DESCONTO de estado entra — o comprador precifica a obra da unidade avaliada.
-  const pisoFechamento = mediaVendasCorr > 0
-    ? mediaVendasCorr + (estadoDeclarado ? Math.min(estadoAdj.valor, 0) : -mediaVendasCorr * 0.05)
+  // Ajuste sobre a média das vendas (uma única vez):
+  //  - estado original (ajuste < 0): desconto da obra — o comprador precifica a atualização;
+  //  - reforma recente (ajuste > 0): sem margem — a unidade acompanha a média cheia
+  //    (o premium em si não infla o piso: piso é evidência de mercado, não de acabamento);
+  //  - estado neutro ("bom" ou não informado): margem prudencial de 5% — sem reforma,
+  //    a unidade não surfa a média cheia dos fechamentos (estado das vendidas é desconhecido).
+  const pisoVendasEstado = mediaVendasCorr > 0
+    ? mediaVendasCorr + (estadoAdj.valor < 0 ? estadoAdj.valor : (estadoAdj.valor > 0 ? 0 : -mediaVendasCorr * 0.05))
+    : 0;
+  // v3.4 · EQUILÍBRIO VENDAS × CONCORRÊNCIA: o comprador enxerga os dois lados —
+  // o que unidades idênticas FECHARAM (ITBI, ajustado acima) e o que a concorrência de
+  // área similar PEDE hoje. Ancorar só nos fechamentos coloca o competitivo no patamar
+  // de quem está parado anunciado; só nos pedidos, abaixo do que o prédio realmente fecha.
+  // Fechamento esperado = ponto médio entre os dois.
+  const mediaPedidosSimilares = pedidosAtivos.length
+    ? pedidosAtivos.reduce((s,v) => s + v, 0) / pedidosAtivos.length
+    : 0;
+  const pisoFechamento = pisoVendasEstado > 0
+    ? (mediaPedidosSimilares > 0 ? (pisoVendasEstado + mediaPedidosSimilares) / 2 : pisoVendasEstado)
     : 0;
 
   // 5) fechamento, valor de mercado e faixa
@@ -302,7 +316,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
-      + (elevadoPorVendas ? ` Fechamento ancorado nas ${vendasRecentes.length === 1 ? "venda idêntica mais recente" : "2 vendas idênticas mais recentes"}: média corrigida pelo IPCA (${milhoes(mediaVendasCorr)})${estadoDeclarado && estadoAdj.valor < 0 ? " menos o desconto de estado" : (!estadoDeclarado ? " com margem de 5% (estado não informado)" : "")} = ${milhoes(pisoFechamento)} — fechado no ITBI vale mais que preço pedido.` : ""),
+      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? "" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
     estado_frase: estadoAdj.frase,
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
@@ -314,6 +328,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       amostras_similares: similares.length,
       travado_por_pedido: travadoPorPedido,
       media_vendas_corrigida: Math.round(mediaVendasCorr),
+      piso_vendas_estado: Math.round(pisoVendasEstado),
+      media_pedidos_similares: Math.round(mediaPedidosSimilares),
       piso_fechamento_vendas: Math.round(pisoFechamento),
       elevado_por_vendas: elevadoPorVendas,
       anuncio, fechamento: Math.round(fechamento),
