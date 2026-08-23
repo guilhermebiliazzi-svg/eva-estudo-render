@@ -14,6 +14,7 @@
 const { fetchCompsByStreet, fetchCompsByRadius } = require("./db_casa");
 const { buildValoracaoCasa } = require("./valoracao_casa");
 const { buildEstudoCasa } = require("./estudo_casa_generator");
+const { buildDecisaoTempo } = require("./decisao_tempo");
 
 // CUB — custo de reposição da construção (R$/m² construído) p/ o método do custo.
 // >>> PLACEHOLDER: ajuste ao CUB-SP (SINDUSCON-SP) do padrão construtivo real. <<<
@@ -107,6 +108,20 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     ref: body.ref || body.estudo_data,
     opts: { cub },
   });
+  // decisão no tempo (passo E) — piso da faixa (p25) como valor competitivo de venda rápida.
+  // Casa de rua: sem condomínio por padrão (aceita body.condominio_mensal se houver, ex. vila fechada).
+  const decisao_tempo = buildDecisaoTempo({
+    piso:          valoracao?._debug?.piso,
+    valor_mercado: valoracao?._debug?.valor,
+    i_anual: 0.139, // CDI (ago/2026) — manter em sincronia com orchestrator.js
+    condominio_mensal: Number(body.condominio_mensal) || 0,
+    iptu_anual:        Number(body.iptu_anual) || 0,
+    aluguel_mensal:    Number(body.aluguel_mensal) || 0,
+    reside: body.reside === true || /^(sim|true|1|reside|mora)$/i.test(String(body.reside||"")),
+    aluga:  body.aluga  === true || /^(sim|true|1|alugad)/i.test(String(body.aluga||"")) || Number(body.aluguel_mensal) > 0,
+    preco_alvo: Number(body.preco_alvo) || null,
+  });
+
   // tabela do slide 9 usa os comps ENRIQUECIDOS (R$/m² de terreno LIMPO) p/ casar com o headline
   const compsFmt = formatComps(valoracao.comps || comps, body.rua);
   return buildEstudoCasa({
@@ -114,6 +129,7 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     corretor: body.corretor || {},
     comps: compsFmt,
     valoracao,
+    decisao_tempo,
     estudo_data: body.estudo_data || "",
     unidade_stats: body.unidade_stats,
     unidade_regioes: body.unidade_regioes,
