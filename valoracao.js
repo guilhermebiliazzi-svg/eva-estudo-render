@@ -43,7 +43,8 @@ function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
 
 const roundTo = (v, step) => Math.round(v/step)*step;
 const floorTo = (v, step) => Math.floor(v/step)*step;
-const decs    = v => (v/1e6) < 10 ? 2 : 1;   // <R$10mi: 2 casas; senão 1
+// <R$10mi: 2 casas (3 quando o valor pede — 1,425 mi não pode virar "1,43"); ≥R$10mi: 1 casa
+const decs    = v => { const m = Number(v)/1e6; if (m >= 10) return 1; const r = Math.round(m*1000); return (Math.abs(m*1000 - r) < 1e-6 && r % 10 !== 0) ? 3 : 2; }; // 3 casas só p/ valores exatos da grade de 25 mil (1,425)
 const milhar  = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 const reaisN  = v => milhar(Math.round(Number(v)/1000)*1000) + ",00"; // arredonda p/ milhar: "461.000,00"
 const reais   = v => "R$ " + reaisN(v);                               // < R$1mi: "R$ 461.000,00"
@@ -252,9 +253,19 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   //    (o premium em si não infla o piso: piso é evidência de mercado, não de acabamento);
   //  - estado neutro ("bom" ou não informado): margem prudencial de 5% — sem reforma,
   //    a unidade não surfa a média cheia dos fechamentos (estado das vendidas é desconhecido).
-  const pisoVendasEstado = mediaVendasCorr > 0
-    ? mediaVendasCorr + (estadoAdj.valor < 0 ? estadoAdj.valor : (estadoAdj.valor > 0 ? 0 : -mediaVendasCorr * 0.05))
+  // v3.5 · o lado "vendas" existe SEMPRE que há unidade idêntica vendida: com venda ≤12 meses usa a
+  // média das 2 últimas corrigidas; sem venda recente usa a ÚLTIMA venda idêntica corrigida pelo IPCA
+  // (tetoCorrecao). Antes, sem venda recente o valor caía na trava "menor pedido × 0,95" — um único
+  // anúncio de outro prédio ditava o resultado (caso Treze de Maio 1203: 650k < venda nominal de 2023).
+  const usaRecentes = mediaVendasCorr > 0;
+  const baseVendas  = usaRecentes ? mediaVendasCorr : (modo === "equivalente" ? tetoCorrecao : 0);
+  // ajuste de estado UMA vez: desconto integral sempre (decisão Guilherme 25/08 — independe da idade do prédio);
+  // premium de reforma só entra na âncora antiga (na média recente ele não infla o piso); neutro → margem 5%.
+  const ajusteVendas = baseVendas > 0
+    ? (estadoAdj.valor < 0 ? estadoAdj.valor
+      : (estadoAdj.valor > 0 ? (usaRecentes ? 0 : estadoAdj.valor) : -baseVendas * 0.05))
     : 0;
+  const pisoVendasEstado = baseVendas > 0 ? baseVendas + ajusteVendas : 0;
   // v3.4 · EQUILÍBRIO VENDAS × CONCORRÊNCIA: o comprador enxerga os dois lados —
   // o que unidades idênticas FECHARAM (ITBI, ajustado acima) e o que a concorrência de
   // área similar PEDE hoje. Ancorar só nos fechamentos coloca o competitivo no patamar
@@ -280,10 +291,12 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // fechamento de 1.349.991 não pode virar 1,30 enquanto 1.350.824 vira 1,35 —
   // R$ 833 de diferença de média de amostras não pode valer um degrau de R$ 50 mil.
   const faixaMin    = roundTo(fechamento, passo);
-  // v3.3 · trava do pedido: anúncio no máximo 5% acima do valor competitivo
-  // (pedido descolado do preço de venda espanta comprador; nunca abaixo do fechamento esperado)
-  if (anuncio > faixaMin * 1.05) anuncio = Math.max(fechamento, faixaMin * 1.05);
-  const valorMerc   = roundTo((fechamento + anuncio)/2, passo);
+  // v3.5 · potencial (~12 meses) = anúncio sugerido = competitivo + 5% arredondado em R$ 25 mil —
+  // exatamente o "valor intermediário" dos cards da decisão no tempo (uma régua só no deck inteiro).
+  // Substitui a trava v3.3 (anúncio ≤ competitivo×1,05) e o potencial por média, que divergiam dos cards.
+  // arredonda PARA CIMA na grade de 25 mil (decisão Guilherme 25/08: 700 → 750; 1,35 → 1,425; 600 → 650)
+  const valorMerc   = Math.ceil(faixaMin * 1.05 / 25e3 - 1e-9) * 25e3;
+  anuncio           = valorMerc;
   const faixaMax    = anuncio;
 
   // labels
@@ -319,8 +332,23 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
-      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? "" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
+      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas") : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? (usaRecentes ? "" : ", mais o prêmio da reforma") : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
     estado_frase: estadoAdj.frase,
+    // v3.5.1 · a conta aberta do slide "Pedido × Fechado" — cada passo com número (evita "de onde veio o 725?")
+    passos_ajuste: elevadoPorVendas ? [
+      usaRecentes
+        ? `Vendas reais de unidades idênticas nos últimos 12 meses: ${vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas"} corrigida pelo IPCA = ${milhoes(mediaVendasCorr)}.`
+        : `Última venda real de unidade idêntica: ${milhoes(aV)} (${ancoraCurto}) × IPCA ${pct(fator)} = ${milhoes(tetoCorrecao)} em valor de hoje.`,
+      estadoAdj.valor < 0
+        ? `Estado original: desconto de ${mi(Math.abs(estadoAdj.valor))} (o comprador precifica a obra) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
+        : (estadoAdj.valor > 0 && !usaRecentes
+            ? `Reforma incorporada: +${mi(estadoAdj.valor)} → lado das vendas: ${milhoes(pisoVendasEstado)}.`
+            : `Estado típico do prédio: margem prudencial de 5% → lado das vendas: ${milhoes(pisoVendasEstado)}.`),
+      mediaPedidosSimilares > 0
+        ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda.`
+        : `Sem anúncio de área similar para calibrar — o lado das vendas define sozinho.`,
+      `Fechamento esperado = média dos dois lados = ${milhoes(pisoFechamento)} → competitivo ${milhoes(faixaMin)} (venda em ~3 meses) · potencial e anúncio ${milhoes(valorMerc)} (+5%).`,
+    ] : [],
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
       anchor: aV, fator: +fator.toFixed(4), teto_correcao: Math.round(tetoCorrecao),
@@ -331,6 +359,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       amostras_similares: similares.length,
       travado_por_pedido: travadoPorPedido,
       media_vendas_corrigida: Math.round(mediaVendasCorr),
+      usa_recentes: usaRecentes, base_vendas: Math.round(baseVendas),
       piso_vendas_estado: Math.round(pisoVendasEstado),
       media_pedidos_similares: Math.round(mediaPedidosSimilares),
       piso_fechamento_vendas: Math.round(pisoFechamento),
