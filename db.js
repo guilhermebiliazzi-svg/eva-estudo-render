@@ -80,6 +80,33 @@ function excluirVendidos(rows, excluir) {
   return kept;
 }
 
+// v3 · LISTA DE APROVADAS do corretor (PASSO 3.5) — o contrato correto: o estudo usa SOMENTE
+// as vendas que o corretor viu e manteve. Substitui a lógica de exclusão, que era furada:
+// a conferência mostrava um subconjunto, o estudo reconsultava o prédio inteiro e entravam
+// vendas que o corretor nunca viu (caso Vila Ibirapuera, 01/09/2026).
+// Vagas avulsas da MESMA DATA de uma venda mantida acompanham (são a mesma transação —
+// a agregação por data soma apto + vagas).
+function manterVendidos(rows, manter) {
+  if (!Array.isArray(rows) || !rows.length) return rows || [];
+  if (!Array.isArray(manter) || !manter.length) return rows;   // [] = sem curadoria → tudo
+  const norm = s => String(s).trim().toUpperCase().replace(/\s+/g, " ");
+  const set = new Set(manter.map(norm).filter(Boolean));
+  const ehVaga = r => /^(VG|VAGA|BOX)([^A-Za-z]|$)/i.test(String(r.unidade || "").trim()) || Number(r.area_m2) < 30;
+  const aprovadas = rows.filter(r => set.has(norm(chaveVendido(r))));
+  const datasOk = new Set(aprovadas.map(r => norm(chaveVendido(r)).split("|")[0]));
+  const kept = rows.filter(r => set.has(norm(chaveVendido(r))) ||
+    (ehVaga(r) && datasOk.has(norm(chaveVendido(r)).split("|")[0])));
+  if (!kept.length) return rows;                                // chaves não bateram → não zera o estudo
+  // âncora do SQL pode ter ficado de fora → promove a venda "apto" mais recente mantida
+  if (!kept.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1)) {
+    const pool = kept.filter(r => !ehVaga(r));
+    const alvo = (pool.length ? pool : kept).reduce((m, r) =>
+      (!m || new Date(r.data) > new Date(m.data)) ? r : m, null);
+    if (alvo) alvo.is_ancora = true;
+  }
+  return kept;
+}
+
 // pool = instância de pg.Pool ; buildingKey = 'LOGRADOURO|NUMERO|CEP'
 // Extraímos NUMERO e CEP da chave e casamos por eles (logradouro é ignorado de propósito).
 // opts.excluir = array de chaves "DD/MM/YYYY|UNIDADE" retiradas pelo corretor (itbi_excluir)
@@ -98,4 +125,4 @@ async function fetchVendidos(pool, buildingKey, opts = {}) {
   return excluirVendidos(mapped, opts.excluir);
 }
 
-module.exports = { fetchVendidos, excluirVendidos, chaveVendido, SQL };
+module.exports = { fetchVendidos, excluirVendidos, manterVendidos, chaveVendido, SQL };

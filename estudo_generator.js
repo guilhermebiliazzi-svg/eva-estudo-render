@@ -338,15 +338,17 @@ function buildEstudo(data, opts={}){
       trunc = allVend.length - vend.length;
     }
     const rowH = vend.length > 6 ? 0.33 : 0.42;
+    const fsz  = vend.length > 6 ? 10.5 : 11;   // 8 linhas: fonte um ponto menor pra célula não quebrar
     const rows = vend.map(v=>{
       const eq = ehAreaIdentica(v);
       const f = v.ancora ? HL : (eq ? EQ : undefined);
       const b = Boolean(v.ancora || eq);
+      const noWrap = t => String(t).replace(/,00$/,"");   // cinto e suspensório: nunca exibir ",00" na célula
       return [cell(v.data,{fill:f,bold:b}),cell(v.unidade,{fill:f,bold:b}),
-        cell(v.area,{fill:f,bold:eq}),cell(v.valor,{fill:f,bold:b}),cell(v.valor_m2,{fill:f})];
-    });
-    s.addTable([head,...rows],{x:MX,y:1.7,w:5.7,colW:[1.15,1.55,1.1,1.1,0.8],
-      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false});
+        cell(v.area,{fill:f,bold:eq}),cell(noWrap(v.valor),{fill:f,bold:b}),cell(v.valor_m2,{fill:f})];
+    }).map(r=>r.map(c=>{ c.options.fontSize = fsz; return c; }));
+    s.addTable([head,...rows],{x:MX,y:1.7,w:5.7,colW:[1.1,1.45,1.05,1.25,0.85],
+      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
 
     // ---- callout à direita: painel de m² (v2) ou tendência (legado)
     const cx=6.55, cw=2.9;

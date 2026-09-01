@@ -15,21 +15,27 @@
  * Por que aqui e não no generator? Porque o generator não sabe a origem dos dados; o orchestrator
  * conhece o pipeline e centraliza a regra metodológica.
  */
-const { fetchVendidos, excluirVendidos } = require("./db");
+const { fetchVendidos, excluirVendidos, manterVendidos } = require("./db");
 const { vendidosFromRows, aggregateByDate } = require("./itbi_format");
 const { buildValoracao } = require("./valoracao");
 const { buildEstudo } = require("./estudo_generator");
 const { buildDecisaoTempo } = require("./decisao_tempo");
 
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                             tipo, area_util, area_total, itbi_excluir,
+                             tipo, area_util, area_total, itbi_excluir, itbi_manter,
                              condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
                              reforma_ano, reforma_padrao, estado }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
-  // (1b) exclusão pelo corretor (PASSO 3.5 da EVA) — no caminho "puro" (vendidosRows no body)
-  //      o filtro ainda não foi aplicado pelo db.js, então aplica aqui. Idempotente.
-  rawRows = excluirVendidos(rawRows, itbi_excluir);
+  // (1b) curadoria do corretor (PASSO 3.5 da EVA) — v3: itbi_manter (lista de APROVADAS) tem
+  //      precedência: o estudo usa SOMENTE o que o corretor viu e manteve. itbi_excluir continua
+  //      aceito para compatibilidade. Idempotente nos dois caminhos.
+  const asList = x => { if (Array.isArray(x)) return x;
+    if (typeof x === "string" && x.trim().startsWith("[")) { try { return JSON.parse(x); } catch (e) { return []; } }
+    return []; };
+  const manterList = asList(itbi_manter);
+  if (manterList.length) rawRows = manterVendidos(rawRows, manterList);
+  else rawRows = excluirVendidos(rawRows, asList(itbi_excluir));
 
   // (2) agrega por data: apto + vagas mesmo dia → 1 transação real
   const aggRows = aggregateByDate(rawRows);
@@ -88,14 +94,14 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 }
 
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                                   tipo, area_util, area_total, itbi_excluir,
+                                   tipo, area_util, area_total, itbi_excluir, itbi_manter,
                                    condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
                                    reforma_ano, reforma_padrao, estado }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
-                       tipo, area_util, area_total, /* exclusão já aplicada no fetch; reaplicar é inócuo */
+                       tipo, area_util, area_total, itbi_manter, /* exclusão já aplicada no fetch */
                        condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
                        reforma_ano, reforma_padrao, estado });
 }
