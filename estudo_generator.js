@@ -419,7 +419,7 @@ function buildEstudo(data, opts={}){
       const yTop=imgY + PT*imgH, yBot=imgY + PB*imgH;
       s.addShape(p.shapes.LINE,{x:mx,y:yTop,w:0,h:yBot-yTop,line:{color:RED,width:1.5,dashType:"dash"}});
       const lblW=2.4, lx=Math.max(imgX, Math.min(mx-lblW/2, imgX+imgW-lblW));
-      s.addText(`${im.predio_curto||"este imóvel"} · ~${idadeM} anos`,
+      s.addText(`${im.predio_curto||"este imóvel"} · ~${Number(im.idade_anos)} anos`,
         {x:lx,y:yTop-0.32,w:lblW,h:0.27,fontFace:BODY,fontSize:10.5,color:NAVY,bold:true,
          align:"center",valign:"middle",margin:0,fill:{color:ICETINT}});
     }
@@ -427,8 +427,15 @@ function buildEstudo(data, opts={}){
     const predio=im.predio_curto||"imóvel";
     const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
     const vend=data.vendidos||[]; const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
+    // fase do ciclo pela idade real (mesmas faixas do gráfico): <12 maturação · 12–25 platô · >25 declínio real
+    const idadeN = Number(im.idade_anos);
+    const faseTxt = !(idadeN >= 0) ? "" : (idadeN < 12
+      ? `ainda está na fase de maturação — o valor cresce, mas o ritmo do boom inicial não se projeta para a frente.`
+      : (idadeN <= 25
+        ? `está no platô — por isso projetar o boom para a frente seria um erro.`
+        : `já passou do platô: a construção está em declínio real e o valor é sustentado pelo terreno e pela localização — não pela inflação.`));
     const terceiroParag = (im.idade_anos != null)
-      ? `O ${predio}${idadeTxt} está entrando no platô — por isso projetar o boom para a frente seria um erro.`
+      ? `O ${predio}${idadeTxt} ${faseTxt}`
       : `Em prédios com histórico de venda forte como este, a fase do ciclo importa: o boom não se projeta linearmente para a frente.`;
     s.addText([
       {text:"O valor de um imóvel é terreno (valoriza) + construção (deprecia).",options:{color:INK,breakLine:true,bold:true}},
@@ -468,14 +475,21 @@ function buildEstudo(data, opts={}){
       {x:x2+0.25,y:y0+0.55,w:cw-0.5,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     s.addText("COMO AJUSTAMOS",{x:MX,y:3.45,w:5,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
     const bul=(t)=>({text:t,options:{bullet:{code:"2022"},color:INK,breakLine:true}});
-    s.addText([
-      bul(concBullet),
-      bul(`Última venda real do prédio: ${val.ancora_valor||""} (${val.ancora_curto||""}) — base do valor de mercado.`),
-      bul(concRealAd
-        ? "Não se anuncia acima de uma unidade equivalente já disponível no mesmo condomínio."
-        : "Sem concorrente direto no condomínio — ajuste se ancora apenas na venda real corrigida."),
-      {text:"Depreciação e platô do ciclo de vida reforçam o ajuste — projeção capada, sem extrapolar o boom.",options:{bullet:{code:"2022"},color:INK}},
-    ],{x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
+    const passos = Array.isArray(val.passos_ajuste) ? val.passos_ajuste : [];
+    if (passos.length) {
+      // conta aberta, passo a passo (v3.5.1) — números que batem com a conclusão
+      s.addText(passos.map((t,i)=>({text:t,options:{bullet:{code:"2022"},color:INK,breakLine:i<passos.length-1}})),
+        {x:MX,y:3.78,w:8.9,h:1.4,fontFace:BODY,fontSize:11,align:"left",valign:"top",margin:0,paraSpaceAfter:4});
+    } else {
+      s.addText([
+        bul(concBullet),
+        bul(`Última venda real do prédio: ${val.ancora_valor||""} (${val.ancora_curto||""}) — base do valor de mercado.`),
+        bul(concRealAd
+          ? "Não se anuncia acima de uma unidade equivalente já disponível no mesmo condomínio."
+          : "Sem concorrente direto no condomínio — ajuste se ancora apenas na venda real corrigida."),
+        {text:"Depreciação e platô do ciclo de vida reforçam o ajuste — projeção capada, sem extrapolar o boom.",options:{bullet:{code:"2022"},color:INK}},
+      ],{x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
+    }
     footer(s,12);
   } else {
     // ===== SLIDE 12 (MODO GLOBAL) — base de comparação pelo m² do condomínio =====
