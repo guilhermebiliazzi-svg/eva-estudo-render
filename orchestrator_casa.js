@@ -11,7 +11,7 @@
  * O `corretor` chega PRONTO no body (resolvido no n8n pelo phone), igual ao apartamento —
  * o orchestrator só repassa.
  */
-const { fetchCompsByStreet, fetchCompsByRadius } = require("./db_casa");
+const { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio } = require("./db_casa");
 const { buildValoracaoCasa } = require("./valoracao_casa");
 const { buildEstudoCasa } = require("./estudo_casa_generator");
 const { buildDecisaoTempo } = require("./decisao_tempo");
@@ -59,7 +59,8 @@ const capWords = s => String(s||"").toLowerCase().replace(/(^|\s)\S/g, c => c.to
 function formatComps(rows, ruaBusca) {
   return rows.map(c => {
     const rua = c.logradouro ? capWords(c.logradouro) : (ruaBusca ? capWords(ruaBusca) : "");
-    const endereco = rua ? `${rua}, ${c.numero}` : `nº ${c.numero}`;
+    let endereco = rua ? `${rua}, ${c.numero}` : `nº ${c.numero}`;
+    if (c.unidade) endereco = `${capWords(c.unidade)} · ${endereco}`;   // casa em condomínio: "Casa 12 · Al. Anapurus, 120"
     return {
       data: dataBR(c.data),
       endereco,
@@ -142,7 +143,13 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
 async function gerarEstudoCasaFromDB({ pool, assets, out, ...body }) {
   if (!pool) throw new Error("pool Postgres ausente");
   let comps;
-  if (body.ponto) {
+  const condoFechado = body.condominio_fechado === true || /^(sim|true|1)$/i.test(String(body.condominio_fechado || ""));
+  if (condoFechado) {
+    // v3.7 · casa em CONDOMÍNIO FECHADO: comps só do próprio condomínio (fração ideal < 1);
+    // a quota de terreno da avaliada (area_terreno do body) vem do carnê do IPTU.
+    if (!body.rua || body.numero == null) throw new Error("rua e numero são obrigatórios (condomínio fechado)");
+    comps = await fetchCompsByCondominio(pool, body.rua, body.numero, { janelaMeses: body.janelaMeses ?? 72 });
+  } else if (body.ponto) {
     // modo raio geográfico (pós-backfill): body.ponto = 'SRID=4326;POINT(lng lat)'
     comps = await fetchCompsByRadius(pool, body.ponto, { raioMetros: body.raioMetros, janelaMeses: body.janelaMeses });
   } else {
