@@ -67,10 +67,40 @@ WHERE geom IS NOT NULL
 ORDER BY dist, data_transacao DESC
 LIMIT $4;`;
 
+// ---- v3.7 · CASA EM CONDOMÍNIO FECHADO: comps do PRÓPRIO condomínio (fração ideal < 1) ----
+// A quota de terreno da unidade (terreno total × fração ideal) vem registrada no próprio ITBI
+// como area_terreno — por isso o método do custo funciona igual: R$/m² de terreno-limpo sobre
+// a quota. Janela maior (72 meses) porque um condomínio tem poucas vendas; o IPCA corrige.
+// $1 = núcleo do logradouro · $2 = número do condomínio (exato) · $3 = janela meses · $4 = limit
+const SQL_CONDO = `
+SELECT
+  data_transacao::date                                        AS data,
+  logradouro,
+  numero,
+  NULLIF(btrim(complemento), '')                              AS unidade,
+  area_terreno::numeric                                       AS area_terreno,
+  area_construida::numeric                                    AS area_construida,
+  valor_transacao::numeric                                    AS valor,
+  round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
+  0                                                           AS dist
+FROM vendidos_itbi_usados
+WHERE logradouro ILIKE '%' || $1 || '%'
+  AND regexp_replace(numero::text, '\\D', '', 'g') = regexp_replace($2::text, '\\D', '', 'g')
+  AND descricao_uso  LIKE 'RESID%'
+  AND fracao_ideal    < 1
+  AND fracao_ideal    > 0
+  AND area_terreno::numeric    > 0
+  AND area_construida::numeric > 0
+  AND valor_transacao::numeric > 0
+  AND data_transacao >= (CURRENT_DATE - ($3::int || ' months')::interval)
+ORDER BY data_transacao DESC
+LIMIT $4;`;
+
 const mapRow = r => ({
   data: r.data,
   logradouro: r.logradouro || null,
   numero: r.numero,
+  unidade: r.unidade || null,   // casa em condomínio: complemento do ITBI (ex.: "CASA 12")
   area_terreno: Number(r.area_terreno),
   area_construida: r.area_construida == null ? null : Number(r.area_construida),
   valor: Number(r.valor),
@@ -111,4 +141,17 @@ async function fetchCompsByRadius(pool, ponto, opts = {}) {
   return rows.map(mapRow);
 }
 
-module.exports = { fetchCompsByStreet, fetchCompsByRadius, SQL_STREET, SQL_RADIUS };
+/**
+ * v3.7 · Comps do PRÓPRIO condomínio fechado (fração ideal < 1) — casa em condomínio.
+ * @param rua    núcleo do logradouro em MAIÚSCULAS, sem acento (ex.: "ANAPURUS")
+ * @param numero número do condomínio (exato)
+ * @param opts   { janelaMeses=72, limit=40 }
+ */
+async function fetchCompsByCondominio(pool, rua, numero, opts = {}) {
+  const janelaMeses = opts.janelaMeses ?? 72;
+  const limit       = opts.limit       ?? 40;
+  const { rows } = await pool.query(SQL_CONDO, [rua, numero, janelaMeses, limit]);
+  return rows.map(mapRow);
+}
+
+module.exports = { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio, SQL_STREET, SQL_RADIUS, SQL_CONDO };
