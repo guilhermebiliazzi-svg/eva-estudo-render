@@ -24,7 +24,7 @@ const { buildDecisaoTempo } = require("./decisao_tempo");
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                              tipo, area_util, area_total, itbi_excluir, itbi_manter,
                              condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
-                             reforma_ano, reforma_padrao, estado }) {
+                             reforma_ano, reforma_padrao, estado, mobilia_valor }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
   // (1b) curadoria do corretor (PASSO 3.5 da EVA) — v3: itbi_manter (lista de APROVADAS) tem
@@ -54,6 +54,7 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
       reforma_ano:   reforma_ano   != null && reforma_ano   !== "" ? Number(reforma_ano) : undefined,
       reforma_padrao: reforma_padrao || undefined,
       estado:         estado || undefined,
+      mobilia_valor:  Number(mobilia_valor) > 0 ? Number(mobilia_valor) : undefined,   // v3.6 porteira fechada
     },
   });
 
@@ -96,14 +97,14 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
                                    tipo, area_util, area_total, itbi_excluir, itbi_manter,
                                    condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
-                                   reforma_ano, reforma_padrao, estado }) {
+                                   reforma_ano, reforma_padrao, estado, mobilia_valor }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                        tipo, area_util, area_total, itbi_manter, /* exclusão já aplicada no fetch */
                        condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
-                       reforma_ano, reforma_padrao, estado });
+                       reforma_ano, reforma_padrao, estado, mobilia_valor });
 }
 
 module.exports = { gerarEstudo, gerarEstudoFromDB };
