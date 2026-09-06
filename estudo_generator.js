@@ -74,6 +74,7 @@ function buildEstudo(data, opts={}){
   const tipoStr = String(data.tipo || im.tipo || im.titulo || "");
   const isComercial = /sala|conjunto|comercial|loja|laje|escrit/i.test(tipoStr) && !/apartamento/i.test(tipoStr);
   const modoGlobal = val.modo === "global";
+  const modoMercado = val.modo === "mercado";   // v3.7 · cidade sem ITBI aberto — só concorrência
   // área total de referência (IPTU) — vem do body (data.area_total) ou da própria valoração
   const areaTotalRef = Number(data.area_total) > 0 ? Number(data.area_total) : (Number(val.area_total_ref) > 0 ? Number(val.area_total_ref) : null);
   const areaFmt = v => String(Number(v)).replace(".", ",");
@@ -316,8 +317,28 @@ function buildEstudo(data, opts={}){
     footer(s,9);
   }
 
+  // ===== SLIDE 10 (MODO MERCADO) — cidade sem ITBI aberto =====
+  if (modoMercado) { let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"09 · Vendidos"); title(s,"Vendas reais — registro público");
+    s.addText("Por que este estudo não traz a tabela de ITBI",
+      {x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    s.addText(val.aviso_sem_itbi||"",
+      {x:MX,y:1.85,w:5.6,h:2.8,fontFace:BODY,fontSize:13,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
+    const cx=6.55, cw=2.9;
+    s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.85,w:cw,h:2.65,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    s.addText("MÉDIA DA CONCORRÊNCIA ATIVA",{x:cx+0.25,y:2.05,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
+    s.addText([{text:val.concorrente_valor||"",options:{fontSize:19,bold:true,color:WHITE,breakLine:true}},
+      {text:val.concorrente_label||"",options:{fontSize:9.5,color:ICE,breakLine:true}},
+      {text:"",options:{breakLine:true,fontSize:5}},
+      {text:"pedido, não venda — o fechamento aplica o deságio (ver ajuste adiante)",options:{fontSize:9,color:ICE,italic:true}}],
+      {x:cx+0.25,y:2.35,w:cw-0.5,h:2.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    s.addText("* Transparência: onde há ITBI aberto (São Paulo capital), este slide traz as vendas reais registradas na Prefeitura. Aqui, a régua é a concorrência ativa aprovada pelo corretor.",
+      {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    footer(s,10);
+  }
+
   // ===== SLIDE 10 — VENDIDOS ITBI — data-driven (v2: unidades idênticas + painel de m²) =====
-  { let s=p.addSlide(); s.background={color:WHITE};
+  if (!modoMercado) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Vendidos"); title(s,"Transações reais — ITBI");
     s.addText("Mesmo prédio · Prefeitura de São Paulo",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
@@ -454,8 +475,30 @@ function buildEstudo(data, opts={}){
     footer(s,11);
   }
 
+  // ===== SLIDE 12 (MODO MERCADO) — do pedido ao fechamento, sem ITBI =====
+  if (modoMercado) { let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"11 · Pedido × Fechado"); title(s,"Do pedido ao fechamento");
+    const cw=4.35, ch=1.4, y0=1.75;
+    s.addShape(p.shapes.RECTANGLE,{x:MX,y:y0,w:cw,h:ch,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
+    s.addText("MÉDIA DA CONCORRÊNCIA ATIVA",{x:MX+0.25,y:y0+0.2,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:MUTED,bold:true,charSpacing:1,margin:0});
+    s.addText([{text:val.concorrente_valor||"",options:{fontSize:23,bold:true,color:NAVY,breakLine:true}},
+      {text:val.concorrente_label||"",options:{fontSize:11.5,color:INK}}],
+      {x:MX+0.25,y:y0+0.55,w:cw-0.5,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    const x2=MX+cw+0.2;
+    s.addShape(p.shapes.RECTANGLE,{x:x2,y:y0,w:cw,h:ch,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    s.addText("FECHAMENTO ESPERADO",{x:x2+0.25,y:y0+0.2,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1,margin:0});
+    s.addText([{text:val.fechamento_esperado||"",options:{fontSize:23,bold:true,color:WHITE,breakLine:true}},
+      {text:"pedido − deságio típico, com o estado ajustado uma única vez",options:{fontSize:11.5,color:ICE}}],
+      {x:x2+0.25,y:y0+0.55,w:cw-0.5,h:0.8,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    s.addText("COMO AJUSTAMOS",{x:MX,y:3.45,w:5,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
+    const passosM = Array.isArray(val.passos_ajuste) ? val.passos_ajuste : [];
+    s.addText(passosM.map((t,i)=>({text:t,options:{bullet:{code:"2022"},color:INK,breakLine:i<passosM.length-1}})),
+      {x:MX,y:3.78,w:8.9,h:1.4,fontFace:BODY,fontSize:11,align:"left",valign:"top",margin:0,paraSpaceAfter:4});
+    footer(s,12);
+  }
+
   // ===== SLIDE 12 — PEDIDO x FECHADO + AJUSTE — data-driven =====
-  if (!modoGlobal) { let s=p.addSlide(); s.background={color:WHITE};
+  if (!modoGlobal && !modoMercado) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"11 · Pedido × Fechado"); title(s,"O ajuste no tempo e a depreciação");
     const cw=4.35, ch=1.4, y0=1.75;
     const concRealAd = val.concorrente_origem === "anuncio";
@@ -493,7 +536,7 @@ function buildEstudo(data, opts={}){
       ],{x:MX,y:3.78,w:8.9,h:1.3,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
     }
     footer(s,12);
-  } else {
+  } else if (modoGlobal) {
     // ===== SLIDE 12 (MODO GLOBAL) — base de comparação pelo m² do condomínio =====
     let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"11 · Base de Comparação"); title(s,"Comparação pelo m² do condomínio");
