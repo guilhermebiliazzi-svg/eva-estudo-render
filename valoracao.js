@@ -113,9 +113,68 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const pool  = unidades.length ? unidades : vendidos; // fallback raro: só houver vaga
   // Guard: sem nada no pool → mensagem clara em vez de "Cannot read properties of undefined (reading 'valor')"
   if (!pool.length) {
+    // ===== v3.7 · MODO MERCADO — cidade SEM ITBI aberto (Alphaville/Barueri, ABC, Guarulhos...) =====
+    // Decisão Guilherme 06/09: sem registro público de vendas, o estudo sai ancorado SÓ na
+    // concorrência ativa: fechamento = média dos pedidos de área similar (±10%) × (1 − deságio),
+    // com estado/reforma ajustando uma vez e transparência total no deck.
+    const areaNumM = a => { const m = String(a.area ?? "").match(/[\d.,]+/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
+    const simsM = amostras.filter(a => {
+      if (!(Number(a.valor) > 0) || a.tipo === "avaliando") return false;
+      if (!areaUtil) return true;
+      const ar = areaNumM(a); return ar > 0 && Math.abs(ar - areaUtil) <= areaUtil * 0.10;
+    });
+    if (simsM.length) {
+      const estadoAdjM = ajusteEstado({ reforma_ano: opts.reforma_ano, reforma_padrao: opts.reforma_padrao,
+        estado: opts.estado, areaUtil, anoRef });
+      const mediaM   = simsM.reduce((s,a) => s + Number(a.valor), 0) / simsM.length;
+      const desagioM = opts.desagio ?? 0.05;
+      let fechM      = mediaM * (1 - desagioM) + estadoAdjM.valor;   // estado ajusta uma vez; deságio já é a margem
+      const passoM   = mediaM < 3e6 ? 50e3 : mediaM < 8e6 ? 250e3 : 0.5e6;
+      const faixaMinM = roundTo(fechM, passoM);
+      const valorMercM = Math.ceil(faixaMinM * 1.05 / 25e3 - 1e-9) * 25e3;
+      const mobM = Math.max(0, Math.round(Number(opts.mobilia_valor) || 0));
+      const anuncioM = valorMercM + mobM;
+      return {
+        modo: "mercado",
+        m2_global: "", m2_global_label: "", m2_equivalente_util: "", m2_equivalente_util_label: "",
+        m2_equivalente_itbi: "", equivalentes_qtd: 0, area_util_ref: areaUtil,
+        concorrente_valor: milhoes(mediaM),
+        concorrente_label: `média de ${simsM.length} anúncio${simsM.length===1?"":"s"} de área similar (±10%)`,
+        concorrente_origem: "media_mercado",
+        ancora_valor: "", ancora_label: "", ancora_curto: "", ipca_pct: "",
+        valor_mercado: milhoes(valorMercM),
+        faixa: `${reais(faixaMinM)} a ${reaisN(anuncioM)}`,
+        anuncio_sugerido: milhoes(anuncioM),
+        anuncio_sub: (mobM > 0 ? `porteira fechada — inclui mobília estimada em ${mi(mobM)} · ` : "")
+          + `ancorado na concorrência ativa · fechamento esperado ~${mi(fechM)}`,
+        fechamento_esperado: milhoes(fechM),
+        aviso_sem_itbi: `Este município não publica os dados das transações de ITBI (diferente de São Paulo capital). ` +
+          `Sem registro público de vendas reais, este estudo se ancora na concorrência ativa: ` +
+          `média de ${simsM.length} anúncio${simsM.length===1?"":"s"} de área similar (±10%) = ${milhoes(mediaM)}, ` +
+          `com deságio de ${Math.round(desagioM*100)}% entre pedido e fechamento.`,
+        conclusao_apoio: `Sem registro público de ITBI neste município, o valor é ancorado na concorrência ativa: ` +
+          `média de ${simsM.length} anúncio${simsM.length===1?"":"s"} de área similar (±10%) = ${milhoes(mediaM)}, ` +
+          `menos o deságio típico de ${Math.round(desagioM*100)}% entre pedido e fechamento` +
+          (estadoAdjM.valor ? ` e com o ajuste de estado aplicado uma única vez` : "") + `: ${milhoes(fechM)}.`
+          + (estadoAdjM.frase ? ` ${estadoAdjM.frase}` : "")
+          + (mobM > 0 ? ` Venda porteira fechada: mobília inclusa estimada em ${mi(mobM)} — somada apenas ao anúncio sugerido (${milhoes(anuncioM)}).` : ""),
+        passos_ajuste: [
+          `Concorrência ativa de área similar (±10%): média de ${simsM.length} anúncio${simsM.length===1?"":"s"} = ${milhoes(mediaM)} — pedido, não venda.`,
+          `Deságio típico pedido → fechamento (${Math.round(desagioM*100)}%): ${milhoes(mediaM * (1 - desagioM))}.`,
+          estadoAdjM.valor < 0 ? `Estado original: desconto de ${mi(Math.abs(estadoAdjM.valor))} → ${milhoes(fechM)}.`
+            : (estadoAdjM.valor > 0 ? `Reforma incorporada: +${mi(estadoAdjM.valor)} (prêmio depreciado) → ${milhoes(fechM)}.`
+              : `Sem ajuste de estado adicional — o deságio já cumpre a margem prudencial.`),
+          `Fechamento esperado ${milhoes(fechM)} → competitivo ${milhoes(faixaMinM)} (venda em ~3 meses) · potencial ${milhoes(valorMercM)} (+5%)${mobM > 0 ? ` · anúncio porteira fechada ${milhoes(anuncioM)}` : ""}.`,
+        ],
+        _debug: { modo: "mercado", area_util: areaUtil, similares: simsM.length,
+          media_pedidos: Math.round(mediaM), desagio: desagioM, estado_adj: Math.round(estadoAdjM.valor),
+          fechamento: Math.round(fechM), faixa: [faixaMinM, anuncioM], valor_mercado: valorMercM,
+          mobilia_valor: mobM || null },
+      };
+    }
     const err = new Error(
-      "Nenhuma venda registrada no ITBI para este endereço. " +
-      "Verifique se o número e CEP estão corretos, ou se o prédio existe na base ITBI consolidada."
+      "Nenhuma venda registrada no ITBI para este endereço e nenhum comparável ativo de área similar. " +
+      "Sem ITBI (cidade fora da base) o estudo precisa de ao menos 1 anúncio comparável aprovado."
     );
     err.code = "NO_ITBI_DATA";
     throw err;
