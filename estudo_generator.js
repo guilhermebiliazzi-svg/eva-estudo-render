@@ -277,7 +277,9 @@ function buildEstudo(data, opts={}){
       const vm = String(out.valor_m2??"");
       if (!vm || vm==="undefined" || vm==="null" || vm==="NaN"){
         const val = Number(out.valor) || money(out.pedido);
-        const ar  = digits(out.area);
+        // primeiro número apenas — "575 m2" tem que dar 575, não 5752 (o "2" do m2 entrava na conta)
+        const arM = String(out.area??"").match(/(\d+(?:[.,]\d+)?)/);
+        const ar  = arM ? parseFloat(arM[1].replace(",", ".")) : 0;
         const pm2 = (val>0 && ar>0) ? val/ar : 0;
         out.valor_m2 = (pm2 >= 1000 && pm2 <= 100000)
           ? String(Math.round(pm2)).replace(/\B(?=(\d{3})+(?!\d))/g,".") : "—";
@@ -285,24 +287,34 @@ function buildEstudo(data, opts={}){
       if (out.area!=null && /^\s*\d+([.,]\d+)?\s*$/.test(String(out.area))) out.area = String(out.area)+" m²";
       return out;
     });
+    const nRows = amostras.length + 1; // + header
+    const fsA = nRows <= 7 ? 11 : 10;  // 8+ linhas: fonte menor pra não embrulhar
+    const truncA = (t,n)=>{ t=String(t??""); return t.length>n ? t.slice(0,n-1).trimEnd()+"…" : t; };
     const rows = amostras.map(a=>{
       const fill = a.tipo==="avaliando" ? {color:ICETINT} : a.tipo==="mesmo_predio" ? {color:REDTINT} : undefined;
       const boldName = a.tipo==="avaliando"||a.tipo==="mesmo_predio";
-      const nameOpts = {align:"left", bold:boldName, ...(fill?{fill}:{}), ...(a.tipo!=="avaliando"?lk(a.link):{})};
-      const c=(t)=> cell(t, fill?{fill}:{});
-      return [cell(a.nome,nameOpts),c(a.bairro),c(a.area),c(a.suites),c(a.vagas),
-        cell(a.pedido, {...(fill?{fill}:{}), bold:boldName}), c(a.valor_m2)];
+      const nameOpts = {align:"left", bold:boldName, fontSize:fsA, ...(fill?{fill}:{}), ...(a.tipo!=="avaliando"?lk(a.link):{})};
+      const c=(t)=> cell(t, {fontSize:fsA, ...(fill?{fill}:{})});
+      return [cell(truncA(a.nome, 42),nameOpts),c(truncA(a.bairro, 24)),c(a.area),c(a.suites),c(a.vagas),
+        cell(a.pedido, {fontSize:fsA, ...(fill?{fill}:{}), bold:boldName}), c(a.valor_m2)];
     });
     // v3 · altura adaptativa: com muitas amostras a tabela encolhe em vez de invadir o rodapé
-    const nRows = rows.length + 1; // + header
     const rowHAd = nRows <= 6 ? 0.5 : nRows <= 8 ? 0.38 : 0.3;
-    s.addTable([head,...rows],{x:MX,y:1.75,w:8.9,colW:[2.5,1.25,0.95,0.85,0.85,1.3,1.2],
-      border:{type:"solid",color:LINE,pt:0.75},rowH:rowHAd,valign:"middle",fontFace:BODY,autoPage:false});
-    const tabelaFim = 1.75 + nRows*rowHAd;
+    s.addTable([head,...rows],{x:MX,y:1.75,w:8.9,colW:[2.5,1.45,0.9,0.75,0.75,1.35,1.2],
+      border:{type:"solid",color:LINE,pt:0.75},rowH:rowHAd,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
+    // v3.7 · a nota só entra se a tabela REAL couber: estima linhas embrulhadas por célula
+    // (nome ~30-34 chars/linha, bairro ~17-20) — antes a conta ignorava o wrap e a nota
+    // era impressa POR CIMA da última linha (caso Villa Solaia, 8 amostras).
+    const chN = fsA===11 ? 30 : 34, chB = fsA===11 ? 17 : 20;
+    const linhasReais = amostras.reduce((sum,a)=>{
+      const l = Math.max(1, Math.ceil(String(truncA(a.nome,42)).length/chN), Math.ceil(String(truncA(a.bairro,24)).length/chB));
+      return sum + Math.max(rowHAd, l*0.21 + 0.09);
+    }, 0);
+    const tabelaFim = 1.75 + rowHAd + linhasReais;
     const mp = amostras.filter(a=>a.tipo==="mesmo_predio");
     let nota;
     if(mp.length){
-      const partes=[{text:"Mesmo prédio à venda: ",options:{color:INK}}];
+      const partes=[{text:"No mesmo condomínio à venda: ",options:{color:INK}}];
       mp.forEach((a,i)=>{ partes.push({text:`${a.ref||a.nome} (${a.suites} ${isComercial?"banh.":"suítes"}) ${a.pedido}`,options:{bold:true,color:RED}});
         if(i<mp.length-1) partes.push({text:" · ",options:{color:INK}}); });
       partes.push({text:".   ",options:{color:INK}});
@@ -312,8 +324,8 @@ function buildEstudo(data, opts={}){
     } else {
       nota=[{text:data.amostras_nota||"Comparáveis ativos do mesmo perfil.",options:{color:INK}}];
     }
-    const notaY = Math.max(4.55, Math.min(4.85, tabelaFim + 0.08));
-    if (tabelaFim <= 4.85) s.addText(nota,{x:MX,y:notaY,w:8.9,h:0.42,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0});
+    const notaY = Math.min(4.85, tabelaFim + 0.08);
+    if (tabelaFim <= 4.72) s.addText(nota,{x:MX,y:notaY,w:8.9,h:0.42,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0});
     footer(s,9);
   }
 
