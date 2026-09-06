@@ -249,8 +249,9 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     : 0;
   // Ajuste sobre a média das vendas (uma única vez):
   //  - estado original (ajuste < 0): desconto da obra — o comprador precifica a atualização;
-  //  - reforma recente (ajuste > 0): sem margem — a unidade acompanha a média cheia
-  //    (o premium em si não infla o piso: piso é evidência de mercado, não de acabamento);
+  //  - reforma recente (ajuste > 0): prêmio depreciado SOMA SEMPRE — v3.6, decisão Guilherme
+  //    03/09 (caso Eng. Jorge Oliva 491: reformado tratado como a média das vendas em estado
+  //    original). Se alguma venda recente já era reformada, o corretor ajusta na conversa;
   //  - estado neutro ("bom" ou não informado): margem prudencial de 5% — sem reforma,
   //    a unidade não surfa a média cheia dos fechamentos (estado das vendidas é desconhecido).
   // v3.5 · o lado "vendas" existe SEMPRE que há unidade idêntica vendida: com venda ≤12 meses usa a
@@ -259,11 +260,10 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // anúncio de outro prédio ditava o resultado (caso Treze de Maio 1203: 650k < venda nominal de 2023).
   const usaRecentes = mediaVendasCorr > 0;
   const baseVendas  = usaRecentes ? mediaVendasCorr : (modo === "equivalente" ? tetoCorrecao : 0);
-  // ajuste de estado UMA vez: desconto integral sempre (decisão Guilherme 25/08 — independe da idade do prédio);
-  // premium de reforma só entra na âncora antiga (na média recente ele não infla o piso); neutro → margem 5%.
+  // ajuste de estado UMA vez: desconto integral sempre (decisão Guilherme 25/08 — independe da
+  // idade do prédio); prêmio de reforma depreciado soma SEMPRE (v3.6, 03/09); neutro → margem 5%.
   const ajusteVendas = baseVendas > 0
-    ? (estadoAdj.valor < 0 ? estadoAdj.valor
-      : (estadoAdj.valor > 0 ? (usaRecentes ? 0 : estadoAdj.valor) : -baseVendas * 0.05))
+    ? (estadoAdj.valor !== 0 ? estadoAdj.valor : -baseVendas * 0.05)
     : 0;
   const pisoVendasEstado = baseVendas > 0 ? baseVendas + ajusteVendas : 0;
   // v3.4 · EQUILÍBRIO VENDAS × CONCORRÊNCIA: o comprador enxerga os dois lados —
@@ -297,6 +297,10 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // arredonda PARA CIMA na grade de 25 mil (decisão Guilherme 25/08: 700 → 750; 1,35 → 1,425; 600 → 650)
   const valorMerc   = Math.ceil(faixaMin * 1.05 / 25e3 - 1e-9) * 25e3;
   anuncio           = valorMerc;
+  // v3.6 · PORTEIRA FECHADA: mobília inclusa soma SÓ ao anúncio sugerido — competitivo e
+  // potencial seguem sendo o imóvel (móvel não entra em avaliação nem em financiamento).
+  const mobiliaValor = Math.max(0, Math.round(Number(opts.mobilia_valor) || 0));
+  if (mobiliaValor > 0) anuncio = valorMerc + mobiliaValor;
   const faixaMax    = anuncio;
 
   // labels
@@ -324,15 +328,17 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       ? `R$ ${(faixaMin/1e6).toFixed(decs(faixaMin)).replace(".",",")} a ${(faixaMax/1e6).toFixed(decs(faixaMax)).replace(".",",")} milhões`
       : `${reais(faixaMin)} a ${reaisN(faixaMax)}`,
     anuncio_sugerido: milhoes(anuncio),
-    anuncio_sub: `${limitadoPorConc ? "alinhado ao concorrente direto" : "ancorado no ITBI corrigido pelo IPCA"} · fechamento esperado ~${mi(fechamento)}`,
+    anuncio_sub: (mobiliaValor > 0 ? `porteira fechada — inclui mobília estimada em ${mi(mobiliaValor)} · ` : "")
+      + `${limitadoPorConc ? "alinhado ao concorrente direto" : "ancorado no ITBI corrigido pelo IPCA"} · fechamento esperado ~${mi(fechamento)}`,
     conclusao_apoio: (limitadoPorConc
       ? `${ancoraFrase} e limitado pela unidade equivalente já anunciada no mesmo condomínio (${milhoes(tetoConc)}).`
       : (concorrente
           ? `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
+      + (mobiliaValor > 0 ? ` Venda porteira fechada: mobília inclusa estimada em ${mi(mobiliaValor)} — somada apenas ao anúncio sugerido (${milhoes(anuncio)}); o valor do imóvel em si segue o competitivo/potencial.` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
-      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas") : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? (usaRecentes ? "" : ", mais o prêmio da reforma") : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
+      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas") : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? ", mais o prêmio da reforma" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
     estado_frase: estadoAdj.frase,
     // v3.5.1 · a conta aberta do slide "Pedido × Fechado" — cada passo com número (evita "de onde veio o 725?")
     passos_ajuste: elevadoPorVendas ? [
@@ -341,13 +347,13 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
         : `Última venda real de unidade idêntica: ${milhoes(aV)} (${ancoraCurto}) × IPCA ${pct(fator)} = ${milhoes(tetoCorrecao)} em valor de hoje.`,
       estadoAdj.valor < 0
         ? `Estado original: desconto de ${mi(Math.abs(estadoAdj.valor))} (o comprador precifica a obra) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
-        : (estadoAdj.valor > 0 && !usaRecentes
-            ? `Reforma incorporada: +${mi(estadoAdj.valor)} → lado das vendas: ${milhoes(pisoVendasEstado)}.`
+        : (estadoAdj.valor > 0
+            ? `Reforma incorporada: +${mi(estadoAdj.valor)} (prêmio depreciado) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
             : `Estado típico do prédio: margem prudencial de 5% → lado das vendas: ${milhoes(pisoVendasEstado)}.`),
       mediaPedidosSimilares > 0
         ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda.`
         : `Sem anúncio de área similar para calibrar — o lado das vendas define sozinho.`,
-      `Fechamento esperado = média dos dois lados = ${milhoes(pisoFechamento)} → competitivo ${milhoes(faixaMin)} (venda em ~3 meses) · potencial e anúncio ${milhoes(valorMerc)} (+5%).`,
+      `Fechamento esperado = média dos dois lados = ${milhoes(pisoFechamento)} → competitivo ${milhoes(faixaMin)} (venda em ~3 meses) · potencial ${milhoes(valorMerc)} (+5%)${mobiliaValor > 0 ? ` · anúncio porteira fechada ${milhoes(anuncio)} (inclui mobília de ${mi(mobiliaValor)})` : " · anúncio igual ao potencial"}.`,
     ] : [],
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
