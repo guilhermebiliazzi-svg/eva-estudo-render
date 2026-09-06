@@ -114,9 +114,11 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // Guard: sem nada no pool → mensagem clara em vez de "Cannot read properties of undefined (reading 'valor')"
   if (!pool.length) {
     // ===== v3.7 · MODO MERCADO — cidade SEM ITBI aberto (Alphaville/Barueri, ABC, Guarulhos...) =====
-    // Decisão Guilherme 06/09: sem registro público de vendas, o estudo sai ancorado SÓ na
-    // concorrência ativa: fechamento = média dos pedidos de área similar (±10%) × (1 − deságio),
-    // com estado/reforma ajustando uma vez e transparência total no deck.
+    // Doutrina Guilherme 06/09 (caso Villa Solaia):
+    //  · NÃO há outlier num comparativo de amostras — quem selecionou, selecionou similares;
+    //  · SEM prêmio/desconto de estado — a comparação é entre similares, o estado já está no preço;
+    //  · "O PRIMEIRO PREÇO É O QUE VENDE" — o fechamento não pode ficar acima do menor pedido
+    //    similar com deságio (mesma doutrina da trava v3.1 do menor pedido no motor com ITBI).
     const areaNumM = a => { const m = String(a.area ?? "").match(/[\d.,]+/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
     const simsM = amostras.filter(a => {
       if (!(Number(a.valor) > 0) || a.tipo === "avaliando") return false;
@@ -124,12 +126,14 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       const ar = areaNumM(a); return ar > 0 && Math.abs(ar - areaUtil) <= areaUtil * 0.10;
     });
     if (simsM.length) {
-      const estadoAdjM = ajusteEstado({ reforma_ano: opts.reforma_ano, reforma_padrao: opts.reforma_padrao,
-        estado: opts.estado, areaUtil, anoRef });
       const mediaM   = simsM.reduce((s,a) => s + Number(a.valor), 0) / simsM.length;
+      const menorM   = Math.min(...simsM.map(a => Number(a.valor)));
       const desagioM = opts.desagio ?? 0.05;
-      let fechM      = mediaM * (1 - desagioM) + estadoAdjM.valor;   // estado ajusta uma vez; deságio já é a margem
-      const passoM   = mediaM < 3e6 ? 50e3 : mediaM < 8e6 ? 250e3 : 0.5e6;
+      let fechM      = mediaM * (1 - desagioM);
+      const capMenorM = menorM * (1 - desagioM);
+      const travadoMenorM = capMenorM < fechM - 1;   // primeiro preço é o que vende
+      if (travadoMenorM) fechM = capMenorM;
+      const passoM   = fechM < 3e6 ? 50e3 : fechM < 8e6 ? 250e3 : 0.5e6;
       const faixaMinM = roundTo(fechM, passoM);
       const valorMercM = Math.ceil(faixaMinM * 1.05 / 25e3 - 1e-9) * 25e3;
       const mobM = Math.max(0, Math.round(Number(opts.mobilia_valor) || 0));
@@ -155,20 +159,19 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
         conclusao_apoio: `Sem registro público de ITBI neste município, o valor é ancorado na concorrência ativa: ` +
           `média de ${simsM.length} anúncio${simsM.length===1?"":"s"} de área similar (±10%) = ${milhoes(mediaM)}, ` +
           `menos o deságio típico de ${Math.round(desagioM*100)}% entre pedido e fechamento` +
-          (estadoAdjM.valor ? ` e com o ajuste de estado aplicado uma única vez` : "") + `: ${milhoes(fechM)}.`
-          + (estadoAdjM.frase ? ` ${estadoAdjM.frase}` : "")
+          (travadoMenorM ? `, limitado pelo menor pedido similar já à venda (${milhoes(menorM)}) — o primeiro preço é o que vende` : "") + `: ${milhoes(fechM)}.`
           + (mobM > 0 ? ` Venda porteira fechada: mobília inclusa estimada em ${mi(mobM)} — somada apenas ao anúncio sugerido (${milhoes(anuncioM)}).` : ""),
         passos_ajuste: [
           `Concorrência ativa de área similar (±10%): média de ${simsM.length} anúncio${simsM.length===1?"":"s"} = ${milhoes(mediaM)} — pedido, não venda.`,
           `Deságio típico pedido → fechamento (${Math.round(desagioM*100)}%): ${milhoes(mediaM * (1 - desagioM))}.`,
-          estadoAdjM.valor < 0 ? `Estado original: desconto de ${mi(Math.abs(estadoAdjM.valor))} → ${milhoes(fechM)}.`
-            : (estadoAdjM.valor > 0 ? `Reforma incorporada: +${mi(estadoAdjM.valor)} (prêmio depreciado) → ${milhoes(fechM)}.`
-              : `Sem ajuste de estado adicional — o deságio já cumpre a margem prudencial.`),
+          travadoMenorM
+            ? `O primeiro preço é o que vende: já existe similar anunciado por ${milhoes(menorM)} — fechamento limitado a ${milhoes(fechM)} (menor pedido − ${Math.round(desagioM*100)}%).`
+            : `Nenhum similar anunciado abaixo da média — o fechamento segue a média com deságio.`,
           `Fechamento esperado ${milhoes(fechM)} → competitivo ${milhoes(faixaMinM)} (venda em ~3 meses) · potencial ${milhoes(valorMercM)} (+5%)${mobM > 0 ? ` · anúncio porteira fechada ${milhoes(anuncioM)}` : ""}.`,
         ],
         _debug: { modo: "mercado", area_util: areaUtil, similares: simsM.length,
-          media_pedidos: Math.round(mediaM), desagio: desagioM, estado_adj: Math.round(estadoAdjM.valor),
-          fechamento: Math.round(fechM), faixa: [faixaMinM, anuncioM], valor_mercado: valorMercM,
+          media_pedidos: Math.round(mediaM), menor_pedido: Math.round(menorM), travado_menor: travadoMenorM,
+          desagio: desagioM, fechamento: Math.round(fechM), faixa: [faixaMinM, anuncioM], valor_mercado: valorMercM,
           mobilia_valor: mobM || null },
       };
     }
