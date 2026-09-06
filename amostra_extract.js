@@ -121,7 +121,7 @@ function mapExtraction(ext, url, subject = {}) {
   return {
     tipo, ref,
     nome: tipo === "mesmo_predio"
-      ? `Mesmo prédio (${ref})`
+      ? `Mesmo condomínio (${ref})`   // neutro: vale p/ prédio vertical e condomínio de casas
       : (ext.condominio || `${ext.bairro || "Imóvel"} ${area ? Math.round(area) + "m²" : ""}`.trim()),
     bairro: ext.bairro || subject.bairro || "",
     area: area ? `${Math.round(area)} m²` : "",
