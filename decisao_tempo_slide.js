@@ -195,7 +195,7 @@ function addDecisaoTempoSlides(p, data, opts={}){
         const pior = pd.key === c.perdas[c.perdas.length-1].key;
         const f = pior ? {color:REDTINT} : undefined;
         rows.push([
-          cell(`Vender em ${c.meses}m — ${shortByKey(pd.key)}`,{align:"left",fill:f}),
+          cell(`Vender em ${c.meses}m — ${pd.short || shortByKey(pd.key)}`,{align:"left",fill:f}),
           cell(pd.preco,{fill:f}),
           cell(pd.vp,{fill:f,bold:true}),
           cell((pd.vp_vs_agora_signed || "−"+pd.vp_vs_agora),
