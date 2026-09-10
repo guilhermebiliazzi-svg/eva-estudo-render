@@ -43,30 +43,44 @@ function vendidosFromRows(rows) {
   });
 }
 
-// detecta vaga avulsa pelo prefixo da unidade (mesmo critério da valoracao.js)
-const isVaga = u => /^(VG|VAGA|BOX)\b/i.test(String(u || "").trim());
+// detecta vaga avulsa: prefixo da unidade OU área minúscula (<15 m² — vaga típica tem 9–13;
+// o corte baixo evita engolir kitnet de 20-28 m²). v3.8: cobre "GAR"/"GARAGEM"/"ESTACIONAMENTO",
+// que antes passavam como "apto" e quebravam o cruzamento apto+vaga (caso APTO 141, 10/09).
+const isVaga = (u, area) =>
+  /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(u || "").trim()) ||
+  (Number(area) > 0 && Number(area) < 15);
 
-// agrega linhas CRUAS por data: apto + vagas do mesmo dia viram 1 linha com valor total.
-// Dias só de vagas (sem apto) são descartados. Útil quando o ITBI registra apto e
-// vagas avulsas como transações separadas — caso comum em prédios novos / paulistas.
-// Resultado: cada linha = 1 transação completa, comparável e coerente para o estudo.
+// agrega linhas CRUAS: apto + vagas do mesmo dia viram 1 linha com valor total.
+// v3.8: vagas lançadas em dia PRÓXIMO (até 5 dias) do apto também são anexadas — a guia da
+// vaga às vezes é paga dias depois; e com 2+ aptos no mesmo dia, nenhum é mais descartado.
 function aggregateByDate(rawRows) {
+  const dayOf = d => { const x = d instanceof Date ? d : new Date(String(d).slice(0,10)); return Math.floor(x.getTime() / 86400000); };
   const byKey = new Map();
   for (const r of (rawRows || [])) {
     const key = String(r.data instanceof Date ? r.data.toISOString().slice(0, 10) : r.data);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key).push(r);
   }
-  const out = [];
+  const grupos = [];      // { apto, vagas: [], dia }
+  const orfas  = [];      // vagas de dia sem apto
   for (const [, rows] of byKey) {
-    const aptos = rows.filter(r => !isVaga(r.unidade));
-    const vagas = rows.filter(r =>  isVaga(r.unidade));
-    if (aptos.length === 0) continue; // só vagas no dia → ignora (não é venda de unidade)
-    const apto = aptos[0]; // 1 apto por dia é o caso dominante em prédios pequenos
+    const aptos = rows.filter(r => !isVaga(r.unidade, r.area_m2));
+    const vagas = rows.filter(r =>  isVaga(r.unidade, r.area_m2));
+    if (aptos.length === 0) { orfas.push(...vagas); continue; }
+    aptos.forEach((apto, i) => grupos.push({ apto, vagas: i === 0 ? vagas.slice() : [], dia: dayOf(apto.data) }));
+  }
+  // vaga órfã → anexa ao apto mais próximo em até 5 dias (guia paga em dia diferente)
+  for (const v of orfas) {
+    const dv = dayOf(v.data);
+    let alvo = null, melhor = 6;
+    for (const g of grupos) { const d = Math.abs(g.dia - dv); if (d < melhor) { melhor = d; alvo = g; } }
+    if (alvo) alvo.vagas.push(v);   // sem apto num raio de 5 dias → descarta (venda avulsa de vaga)
+  }
+  const out = grupos.map(({ apto, vagas }) => {
     const vagasValor = vagas.reduce((s, v) => s + Number(v.valor || 0), 0);
     const valorTotal = Number(apto.valor || 0) + vagasValor;
     const aptoArea = Number(apto.area_m2 || 0);
-    out.push({
+    return {
       data: apto.data,
       unidade: vagas.length > 0
         ? `${apto.unidade} + ${vagas.length} vaga${vagas.length > 1 ? "s" : ""}`
@@ -74,9 +88,9 @@ function aggregateByDate(rawRows) {
       area_m2: aptoArea,
       valor: valorTotal,
       valor_m2: aptoArea > 0 ? valorTotal / aptoArea : 0,
-      is_ancora: rows.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1),
-    });
-  }
+      is_ancora: [apto, ...vagas].some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1),
+    };
+  });
   // ordena por data ASC (mesma ordem que o SQL C1 produz)
   out.sort((a, b) => new Date(a.data) - new Date(b.data));
   return out;
