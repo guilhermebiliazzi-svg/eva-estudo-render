@@ -98,21 +98,30 @@ function buildDecisaoTempo({
     : ((valor_mercado != null && Number(valor_mercado) > 0) ? Number(valor_mercado) : null);
   const alvoOrigem = (preco_alvo != null && Number(preco_alvo) > 0) ? "informado_dono" : (alvoEff != null ? "media_mercado" : "nao_definido");
 
-  const fechamentos = [];
-  if (alvoEff != null) {
-    const alvoTag = alvoOrigem === "informado_dono" ? "alvo do proprietário" : "preço médio de mercado";
-    fechamentos.push({ key: "alvo", cenario: "otimista",
-      label: `Vende pelo ${alvoTag} (${milhoes(alvoEff)})`, preco: alvoEff });
-  }
-  fechamentos.push({ key: "piso", cenario: "neutro",
+  // v4 · a matriz compara SÓ os preços que o ESTUDO apresenta (régua dos cards) — nunca o
+  // preço-alvo do proprietário (decisão Guilherme 10/09: a linha "atinge o preço do
+  // proprietário" com ganho em verde funcionava como endosso visual do preço dele).
+  // 12m → valor intermediário · 24m → valor superotimista (mesmas fórmulas dos cards).
+  const vInterLadder = Math.ceil(P3 * 1.05 / 25e3 - 1e-9) * 25e3;
+  const vOtimLadder  = Math.round(P3 * 1.15 / 25e3) * 25e3;
+  const fechamentosBase = [];
+  fechamentosBase.push({ key: "piso", cenario: "neutro", short: "volta ao valor competitivo",
     label: `Encalha e volta ao piso (${milhoes(P3)})`, preco: P3 });
   for (const d of descontos_encalhe) {
     const pf = P3 * (1 + d);
-    fechamentos.push({ key: `enc${Math.round(Math.abs(d)*100)}`, cenario: "pessimista",
+    fechamentosBase.push({ key: `enc${Math.round(Math.abs(d)*100)}`, cenario: "pessimista",
+      short: `encalha −${Math.round(Math.abs(d)*100)}%`,
       label: `Encalha e fecha ${pctBR(Math.abs(d))} abaixo do piso (${milhoes(pf)})`, preco: pf });
   }
 
-  const cenarios = horizontes.map(T => {
+  const cenarios = horizontes.map((T, iH) => {
+    const topoNome  = iH === 0 ? "valor intermediário" : "valor superotimista";
+    const topoPreco = iH === 0 ? vInterLadder : vOtimLadder;
+    const fechamentos = [
+      { key: "alvo", cenario: "otimista", short: `fecha no ${topoNome}`,
+        label: `Fecha no ${topoNome} do estudo (${milhoes(topoPreco)})`, preco: topoPreco },
+      ...fechamentosBase,
+    ];
     // custo de esperar corre só sobre os MESES A MAIS além da venda rápida (T − meses_rapida):
     // vender em 3 meses vs em 12 = 9 meses extras; vs em 24 = 21 meses extras.
     const dt = Math.max(0, T - meses_rapida);
@@ -132,7 +141,7 @@ function buildDecisaoTempo({
       const vp = P3 - valorFV / disc;                        // o que sobra, em dinheiro de HOJE
       const dvp = vp - P3;                                   // >0 ⇒ estratégia rende MAIS que vender agora
       return {
-        key: f.key, cenario: f.cenario, label: f.label, preco: milhoes(f.preco),
+        key: f.key, cenario: f.cenario, label: f.label, short: f.short, preco: milhoes(f.preco),
         perda: valorFV > 0 ? milhoes(valorFV) : "sem perda",
         vp: milhoes(vp),                                     // valor presente da estratégia de esperar
         vp_vs_agora: milhoes(P3 - vp),                       // legado (módulo, sem sinal) — manter compat
