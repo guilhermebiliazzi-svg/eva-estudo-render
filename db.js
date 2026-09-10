@@ -91,11 +91,16 @@ function manterVendidos(rows, manter) {
   if (!Array.isArray(manter) || !manter.length) return rows;   // [] = sem curadoria → tudo
   const norm = s => String(s).trim().toUpperCase().replace(/\s+/g, " ");
   const set = new Set(manter.map(norm).filter(Boolean));
-  const ehVaga = r => /^(VG|VAGA|BOX)([^A-Za-z]|$)/i.test(String(r.unidade || "").trim()) || Number(r.area_m2) < 30;
+  // v3.8 · mesmo critério de vaga do itbi_format (prefixo ampliado + área <15 m²), e a vaga
+  // acompanha a venda mantida se foi lançada em até 5 dias de distância (guia paga depois).
+  const ehVaga = r => /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(r.unidade || "").trim()) ||
+    (Number(r.area_m2) > 0 && Number(r.area_m2) < 15);
+  const diaDe = r => { const [dd, mm, yy] = norm(chaveVendido(r)).split("|")[0].split("/");
+    return Math.floor(Date.UTC(+yy, +mm - 1, +dd) / 86400000); };
   const aprovadas = rows.filter(r => set.has(norm(chaveVendido(r))));
-  const datasOk = new Set(aprovadas.map(r => norm(chaveVendido(r)).split("|")[0]));
-  const kept = rows.filter(r => set.has(norm(chaveVendido(r))) ||
-    (ehVaga(r) && datasOk.has(norm(chaveVendido(r)).split("|")[0])));
+  const diasOk = aprovadas.map(diaDe);
+  const pertoDeMantida = r => { const d = diaDe(r); return diasOk.some(x => Math.abs(x - d) <= 5); };
+  const kept = rows.filter(r => set.has(norm(chaveVendido(r))) || (ehVaga(r) && pertoDeMantida(r)));
   if (!kept.length) return rows;                                // chaves não bateram → não zera o estudo
   // âncora do SQL pode ter ficado de fora → promove a venda "apto" mais recente mantida
   if (!kept.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1)) {
