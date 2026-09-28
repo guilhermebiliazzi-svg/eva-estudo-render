@@ -22,11 +22,22 @@
  *       · alugado           → carregamento = (condô + IPTU/12) − aluguel   (aluguel abate)
  *       · desocupado s/ alug → carregamento = condô + IPTU/12               (custo cheio)
  *
+ *   ADENDO (28/09/2026) — QUEM PAGA CONDOMÍNIO/IPTU NO IMÓVEL ALUGADO:
+ *   - Por padrão o motor assume que o PROPRIETÁRIO paga condô/IPTU e o aluguel abate esses custos.
+ *   - Quando o contrato joga condô/IPTU para o INQUILINO (encargos_locatario = true), o aluguel
+ *     entra 100% limpo como renda do dono: carregamento = − aluguel (não se desconta condô/IPTU,
+ *     que não são despesa do proprietário enquanto o imóvel está locado).
+ *   - Os VALORES de condô/IPTU continuam reais no objeto (não são zerados) — servem para o rótulo,
+ *     para o regime desocupado e para qualquer outra parte do estudo que os exiba.
+ *     (Origem: captação Rodrigo Z. Valente — aluguel R$ 4.500 líquido, inquilino paga condô/IPTU;
+ *      o motor descontava condô/IPTU do aluguel e subavaliava a renda no slide.)
+ *
  *   const { buildDecisaoTempo } = require("./decisao_tempo");
  *   data.decisao_tempo = buildDecisaoTempo({
  *     piso: 1150000, i_anual: 0.139,
  *     condominio_mensal: 1800, iptu_anual: 9600, aluguel_mensal: 0,
- *     reside: false, aluga: false, horizontes: [12, 24], preco_alvo: 1350000
+ *     reside: false, aluga: false, encargos_locatario: false,
+ *     horizontes: [12, 24], preco_alvo: 1350000
  *   });
  */
 
@@ -54,6 +65,7 @@ function buildDecisaoTempo({
   aluguel_mensal = 0,
   reside = false,             // proprietário mora no imóvel
   aluga = false,              // imóvel gera renda de aluguel
+  encargos_locatario = false, // (28/09) no imóvel alugado, INQUILINO paga condô/IPTU → aluguel entra limpo
   horizontes = [12, 24],      // meses adicionais (além do marco de 3m)
   preco_alvo = null,          // preço que o DONO quer segurar (informado pelo corretor)
   valor_mercado = null,       // fallback: preço médio de mercado do estudo (quando o dono não sabe o alvo)
@@ -78,7 +90,12 @@ function buildDecisaoTempo({
   if (reside) {
     custoCarregMensal = 0;                                  regime = "reside";       // usa o bem; só capital
   } else if (aluga) {
-    custoCarregMensal = custoBrutoMensal - Number(aluguel_mensal); regime = "alugado"; // aluguel abate
+    // (28/09) se o INQUILINO paga condô/IPTU, o aluguel entra 100% limpo: carregamento = − aluguel.
+    // caso contrário (dono paga), o aluguel abate os custos que o dono continua pagando.
+    custoCarregMensal = encargos_locatario
+      ? -Number(aluguel_mensal)
+      : (custoBrutoMensal - Number(aluguel_mensal));
+    regime = "alugado";
   } else {
     custoCarregMensal = custoBrutoMensal;                   regime = "desocupado";   // custo cheio
   }
@@ -98,30 +115,21 @@ function buildDecisaoTempo({
     : ((valor_mercado != null && Number(valor_mercado) > 0) ? Number(valor_mercado) : null);
   const alvoOrigem = (preco_alvo != null && Number(preco_alvo) > 0) ? "informado_dono" : (alvoEff != null ? "media_mercado" : "nao_definido");
 
-  // v4 · a matriz compara SÓ os preços que o ESTUDO apresenta (régua dos cards) — nunca o
-  // preço-alvo do proprietário (decisão Guilherme 10/09: a linha "atinge o preço do
-  // proprietário" com ganho em verde funcionava como endosso visual do preço dele).
-  // 12m → valor intermediário · 24m → valor superotimista (mesmas fórmulas dos cards).
-  const vInterLadder = Math.ceil(P3 * 1.05 / 25e3 - 1e-9) * 25e3;
-  const vOtimLadder  = Math.round(P3 * 1.15 / 25e3) * 25e3;
-  const fechamentosBase = [];
-  fechamentosBase.push({ key: "piso", cenario: "neutro", short: "volta ao valor competitivo",
+  const fechamentos = [];
+  if (alvoEff != null) {
+    const alvoTag = alvoOrigem === "informado_dono" ? "alvo do proprietário" : "preço médio de mercado";
+    fechamentos.push({ key: "alvo", cenario: "otimista",
+      label: `Vende pelo ${alvoTag} (${milhoes(alvoEff)})`, preco: alvoEff });
+  }
+  fechamentos.push({ key: "piso", cenario: "neutro",
     label: `Encalha e volta ao piso (${milhoes(P3)})`, preco: P3 });
   for (const d of descontos_encalhe) {
     const pf = P3 * (1 + d);
-    fechamentosBase.push({ key: `enc${Math.round(Math.abs(d)*100)}`, cenario: "pessimista",
-      short: `encalha −${Math.round(Math.abs(d)*100)}%`,
+    fechamentos.push({ key: `enc${Math.round(Math.abs(d)*100)}`, cenario: "pessimista",
       label: `Encalha e fecha ${pctBR(Math.abs(d))} abaixo do piso (${milhoes(pf)})`, preco: pf });
   }
 
-  const cenarios = horizontes.map((T, iH) => {
-    const topoNome  = iH === 0 ? "valor intermediário" : "valor superotimista";
-    const topoPreco = iH === 0 ? vInterLadder : vOtimLadder;
-    const fechamentos = [
-      { key: "alvo", cenario: "otimista", short: `fecha no ${topoNome}`,
-        label: `Fecha no ${topoNome} do estudo (${milhoes(topoPreco)})`, preco: topoPreco },
-      ...fechamentosBase,
-    ];
+  const cenarios = horizontes.map(T => {
     // custo de esperar corre só sobre os MESES A MAIS além da venda rápida (T − meses_rapida):
     // vender em 3 meses vs em 12 = 9 meses extras; vs em 24 = 21 meses extras.
     const dt = Math.max(0, T - meses_rapida);
@@ -139,14 +147,12 @@ function buildDecisaoTempo({
     const perdas = fechamentos.map(f => {
       const valorFV = preco_equilibrio - f.preco;           // perda capitalizada (valor futuro), >0 ⇒ prejuízo
       const vp = P3 - valorFV / disc;                        // o que sobra, em dinheiro de HOJE
-      const dvp = vp - P3;                                   // >0 ⇒ estratégia rende MAIS que vender agora
       return {
-        key: f.key, cenario: f.cenario, label: f.label, short: f.short, preco: milhoes(f.preco),
+        key: f.key, cenario: f.cenario, label: f.label, preco: milhoes(f.preco),
         perda: valorFV > 0 ? milhoes(valorFV) : "sem perda",
         vp: milhoes(vp),                                     // valor presente da estratégia de esperar
-        vp_vs_agora: milhoes(P3 - vp),                       // legado (módulo, sem sinal) — manter compat
-        vp_vs_agora_signed: (dvp >= 0 ? "+" : "−") + milhoes(Math.abs(dvp)), // com sinal correto
-        _perda: Math.round(valorFV), _vp: Math.round(vp), _dvp: Math.round(dvp),
+        vp_vs_agora: milhoes(P3 - vp),                       // quanto a menos que vender agora (em R$ de hoje)
+        _perda: Math.round(valorFV), _vp: Math.round(vp),
       };
     });
 
@@ -177,12 +183,15 @@ function buildDecisaoTempo({
   const regimeTxt = regime === "reside"
     ? "Como o proprietário reside no imóvel, os custos de condomínio/IPTU não entram (uso do bem), mas o capital segue imobilizado — por isso o custo de oportunidade permanece."
     : regime === "alugado"
-      ? "Como o imóvel gera aluguel, a renda abate os custos de carregamento no período."
+      ? (encargos_locatario
+          ? "Como o imóvel está alugado e o inquilino arca com condomínio e IPTU, o aluguel entra integralmente como renda que abate o custo de carregar o imóvel no período."
+          : "Como o imóvel gera aluguel, a renda abate os custos de carregamento no período.")
       : "Imóvel desocupado e sem aluguel: condomínio e IPTU correm como custo cheio enquanto não vende, somados ao custo de oportunidade do capital.";
 
   return {
     aplicavel: true,
     regime,
+    encargos_locatario: !!(aluga && encargos_locatario),
     p3: milhoes(P3),
     p3_label: `piso da faixa · venda em ~${meses_rapida} meses`,
     vender_agora_vp: milhoes(P3),          // referência: vender agora = ter P3 em dinheiro de hoje (a maior barra)
@@ -196,7 +205,9 @@ function buildDecisaoTempo({
     i_anual_pct: pctBR(iaEff),
     taxa_label: `custo de oportunidade ${pctBR(iaEff)} a.a. (CDI) · ${pctBR(im)} a.m.`,
     custo_carreg_mensal: custoCarregMensal > 0 ? reaisEx(Math.round(custoCarregMensal)) : (custoCarregMensal < 0 ? "renda líquida " + reaisEx(Math.round(-custoCarregMensal)) : "—"),
-    custo_carreg_label: `condomínio ${reaisEx(Math.round(condominio_mensal))}/mês + IPTU ${reaisEx(Math.round(iptu_anual/12))}/mês${aluga ? ` − aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês` : ""}`,
+    custo_carreg_label: (aluga && encargos_locatario)
+      ? `aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês — inquilino paga condomínio e IPTU`
+      : `condomínio ${reaisEx(Math.round(condominio_mensal))}/mês + IPTU ${reaisEx(Math.round(iptu_anual/12))}/mês${aluga ? ` − aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês` : ""}`,
     regime_texto: regimeTxt,
     cenarios,
     chamada: `Vender por ${milhoes(P3)} em ~${meses_rapida} meses, ou segurar por um valor maior?` + alvoTxt,
@@ -207,14 +218,7 @@ function buildDecisaoTempo({
       "o proprietário já perdeu todo o custo de esperar; se fechar abaixo do piso, a perda cresce na mesma proporção do desconto.",
     _debug: {
       regime, P3, im: +im.toFixed(6), i_anual_efetiva: +iaEff.toFixed(4),
-      alvo: alvoEff != null ? Math.round(alvoEff) : null,
-      valor_mercado: (valor_mercado != null && Number(valor_mercado) > 0) ? Math.round(Number(valor_mercado)) : null,
-      // régua dos cards (Pareto 80%): intermediário = competitivo +5%, superotimista = +15%,
-      // arredondados no passo de R$ 25 mil (regra Guilherme, 23/08/2026)
-      valor_intermediario: Math.ceil(P3 * 1.05 / 25e3 - 1e-9) * 25e3,   // p/ cima na grade de 25k (= potencial do estudo)
-      valor_superotimista: Math.round(P3 * 1.15 / 25e3) * 25e3,
-      meses_rapida,
-      horizontes: horizontes.slice(),
+      encargos_locatario: !!(aluga && encargos_locatario),
       custo_carreg_mensal: Math.round(custoCarregMensal),
       cenarios: cenarios.map(c => ({ meses: c.meses, ...Object.fromEntries(Object.entries(c._n).map(([k,v]) => [k, v==null?null:Math.round(v)])) })),
     }
