@@ -1,0 +1,43 @@
+diff --git a/orchestrator.js b/orchestrator.js
+--- a/orchestrator.js
++++ b/orchestrator.js
+@@ async function gerarEstudo({ ... }) {
+ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
+                              tipo, area_util, area_total, itbi_excluir,
+                              condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+-                             reforma_ano, reforma_padrao, estado }) {
++                             reforma_ano, reforma_padrao, estado,
++                             encargos_por_conta }) {
+   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
+@@ (3b) decisão no tempo — buildDecisaoTempo(...)
+   const decisao_tempo = buildDecisaoTempo({
+     piso:          valoracao?._debug?.faixa?.[0],
+     valor_mercado: valoracao?._debug?.valor_mercado,
+     i_anual: 0.139, // CDI (ago/2026). Atualizar quando a Selic mudar (ou puxar da série do BCB).
+     condominio_mensal: Number(condominio_mensal) || 0,
+     iptu_anual:        Number(iptu_anual) || 0,
+     aluguel_mensal:    Number(aluguel_mensal) || 0,
+     reside: reside === true || /^(sim|true|1|reside|mora)$/i.test(String(reside||"")),
+     aluga:  aluga  === true || /^(sim|true|1|alugad)/i.test(String(aluga||"")) || Number(aluguel_mensal) > 0,
++    // (28/09) quem paga condô/IPTU no imóvel alugado. "locatário"/"inquilino" ⇒ aluguel entra limpo.
++    encargos_locatario: /^(locat|inquil)/i.test(String(encargos_por_conta||"")),
+     preco_alvo: Number(preco_alvo) || null,
+   });
+
+@@ async function gerarEstudoFromDB({ ... }) {
+ async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
+                                    tipo, area_util, area_total, itbi_excluir,
+                                    condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+-                                   reforma_ano, reforma_padrao, estado }) {
++                                   reforma_ano, reforma_padrao, estado,
++                                   encargos_por_conta }) {
+   if (!buildingKey) throw new Error("buildingKey ausente");
+   if (!pool)        throw new Error("pool Postgres ausente");
+   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
+   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
+                        tipo, area_util, area_total, /* exclusão já aplicada no fetch; reaplicar é inócuo */
+                        condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+-                       reforma_ano, reforma_padrao, estado });
++                       reforma_ano, reforma_padrao, estado,
++                       encargos_por_conta });
+ }
