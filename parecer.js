@@ -174,6 +174,21 @@ function _textoDe(x) {
           x.label, x.titulo, x.texto, x.tipo, x.titular].filter(Boolean).join(" ");
 }
 
+// O texto `txt` cobre o item `nome` (do titular `titular`)? Exige as palavras
+// distintivas do NOME do item — o nome do titular sozinho não basta (antes,
+// "JAIRO LESSA CREPALDI" casava qualquer condicionante do Jairo).
+const _GENERICAS = new Set(["certidao","certidão","estadual","distribuicoes","distribuições","civeis","cíveis","negativa","debitos","débitos","tributos","concluir","obter","antes","titulo","título","definitivo","pesquisa","consulta","nacional","abrangencia","abrangência","judicial","eletronica","eletrônica","acoes","ações","processos","comprovante"]);
+function cobreItem(txt, nome, titular) {
+  const t = String(txt || "").toLowerCase();
+  const ks = (String(nome || "").toLowerCase().match(/[a-zà-ú0-9]{3,}/gi) || []).filter(k => !_GENERICAS.has(k));
+  const alvo = ks.length ? ks : (String(nome || "").toLowerCase().match(/[a-zà-ú0-9]{3,}/gi) || []);
+  if (!alvo.length) return false;
+  const hit = alvo.filter(k => t.includes(k)).length;
+  if (hit < Math.min(2, alvo.length)) return false;
+  if (titular) { const p1 = String(titular).toLowerCase().split(/\s+/)[0]; if (p1 && !t.includes(p1)) return false; }
+  return true;
+}
+
 function garantirCondicionantes(saida, fatos) {
   if (!saida || typeof saida !== "object") return;
   if (!Array.isArray(saida.condicionantes)) saida.condicionantes = [];
@@ -187,13 +202,20 @@ function garantirCondicionantes(saida, fatos) {
       return ch.filter(k => ct.includes(k)).length >= Math.min(2, ch.length);
     });
   };
-  const add = (desc, fonte) => {
+  if (!Array.isArray(saida.pendencias)) saida.pendencias = [];
+  const add = (desc, fonte, nomeItem, titularItem) => {
     if (!desc) return;
+    const f = fonte || "coerência automática: pendência sem condicionante";
     saida.condicionantes.push({
+      titulo: tituloCurto(desc),
+      descricao: desc + " antes do título definitivo.",
       item: desc,
       prazo: "antes do título definitivo",
-      fonte: fonte || "coerência automática: pendência sem condicionante"
+      fonte: f
     });
+    // a mesma lista alimenta a cláusula 5.3 do CCV (fonte única — §4 do prompt)
+    const itemPend = desc.replace(/^Concluir\/obter:?\s*/i, "");
+    if (!saida.pendencias.some(p => cobreItem(_textoDe(p), nomeItem || itemPend, titularItem))) saida.pendencias.push({ item: itemPend, fonte: f, classe: "diferivel" });
   };
 
   // (a) apontamentos com situação pendente
@@ -210,7 +232,7 @@ function garantirCondicionantes(saida, fatos) {
   // status não listado NÃO geram nada — evita falso-positivo silencioso.
   const STATUS_OBTER = new Set([
     "pendente", "aguardando_email", "aguardando_match",
-    "em_processamento", "erro_infosimples"
+    "em_processamento", "erro_infosimples", "baixando_esaj"
   ]);
   const STATUS_SANEAR = new Set(["com_pendencias"]);
 
@@ -222,21 +244,106 @@ function garantirCondicionantes(saida, fatos) {
     const chaveDedup = nome + " " + ((it && it.titular) || "");
 
     if (STATUS_OBTER.has(st)) {
-      if (!jaCobre(chaveDedup))
-        add("Concluir/obter " + nome + tit, "inventário (status: " + (it.status || "pendente") + ")");
+      if (!saida.condicionantes.some(c => cobreItem(_textoDe(c) + " " + ((c && c.descricao) || ""), nome, it && it.titular)))
+        add("Concluir/obter " + nome + tit, "inventário (status: " + (it.status || "pendente") + ")", nome, it && it.titular);
     } else if (STATUS_SANEAR.has(st)) {
-      if (!jaCobre(chaveDedup))
+      if (!saida.condicionantes.some(c => cobreItem(_textoDe(c) + " " + ((c && c.descricao) || ""), nome, it && it.titular)))
         add("Verificar e sanear a pendência apontada em " + nome + tit,
-            "inventário (status: " + (it.status || "com_pendencias") + ")");
+            "inventário (status: " + (it.status || "com_pendencias") + ")", nome, it && it.titular);
     }
     // concluido, cancelada e status desconhecido: não gera condicionante.
   });
+}
+
+// Título curto para o cabeçalho da condicionante (o renderizador mostra `titulo`).
+function tituloCurto(txt) {
+  const s = String(txt || "").replace(/\s+/g, " ").trim()
+    .replace(/\s+antes do título definitivo\.?$/i, "");
+  const curto = s.split(/[—(:;,.]/)[0].trim();
+  const base = curto.length >= 8 ? curto : s;
+  return base.length > 80 ? base.slice(0, 77).trim() + "…" : base;
+}
+
+function _dataBR(s) {
+  const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])) : null;
+}
+
+/**
+ * Pós-processamento determinístico (não depende do humor do modelo):
+ *  - condicionante sem `titulo` ganha um (o HTML mostra o título em destaque);
+ *  - matrícula de consulta / antiga / indeterminada => exige certidão atualizada;
+ *  - empresa relacionada (papel empresa_relacionada) nunca vira "aptidão p/ alienar";
+ *  - Seção 1 (Imóvel e operação) é completada com os FATOS se o modelo omitir.
+ */
+function posProcessar(saida, fatos) {
+  if (!saida || typeof saida !== "object") return;
+  saida.condicionantes = (Array.isArray(saida.condicionantes) ? saida.condicionantes : []).map(c => {
+    if (typeof c === "string") return { titulo: tituloCurto(c), descricao: c, fonte: "modelo" };
+    if (c && !c.titulo) c.titulo = tituloCurto(c.item || c.descricao || c.texto || "");
+    if (c && !c.descricao) c.descricao = c.item || c.texto || c.titulo;
+    return c;
+  });
+  if (!Array.isArray(saida.alertas)) saida.alertas = [];
+  if (!Array.isArray(saida.pendencias)) saida.pendencias = [];
+
+  // (1) matrícula: só certidão recente dispensa a condicionante
+  const sr = saida.situacao_registral || {};
+  const md = sr.matricula_documento || {};
+  const tipo = String(md.tipo || "indeterminado").toLowerCase();
+  const emissao = _dataBR(md.data_emissao);
+  const velha = emissao ? (Date.now() - emissao.getTime()) / 86400000 > 30 : false;
+  if (tipo !== "certidao" || velha) {
+    const motivo = tipo === "consulta" ? "a matrícula anexada é cópia para simples consulta (não vale como certidão)"
+      : (velha ? "a matrícula anexada foi emitida há mais de 30 dias" : "não foi possível confirmar que a matrícula anexada é certidão");
+    const desc = "Obter certidão de matrícula atualizada (com valor de certidão, emitida há no máximo 30 dias) — " + motivo;
+    const cobre = saida.condicionantes.some(c => /certid[aã]o de matr[ií]cula|matr[ií]cula atualizada/i.test(_textoDe(c) + " " + (c.descricao || "")));
+    if (!cobre) {
+      saida.condicionantes.unshift({ titulo: "Certidão de matrícula atualizada", descricao: desc + ", antes do título definitivo.", prazo: "antes do título definitivo", fonte: "situacao_registral.matricula_documento" });
+    }
+    if (!saida.pendencias.some(p => /matr[ií]cula/i.test(_textoDe(p)))) {
+      saida.pendencias.unshift({ item: "Certidão de matrícula atualizada (com valor de certidão)", fonte: "situacao_registral.matricula_documento", classe: "diferivel" });
+    }
+    if (!saida.alertas.some(a => /matr[ií]cula/i.test(String(a && a.descricao)) && /consulta|certid/i.test(String(a && a.descricao)))) {
+      saida.alertas.push({ campo: "situacao_registral.matricula_documento", descricao: "Análise registral feita sobre documento que não é certidão atualizada: " + motivo + ".", severidade: "media" });
+    }
+  }
+
+  // (2) empresa relacionada: fora de alertas/pendências/condicionantes de legitimação
+  const relac = (Array.isArray(fatos && fatos.partes) ? fatos.partes : [])
+    .filter(p => p && p.papel === "empresa_relacionada" && p.nome)
+    .map(p => String(p.nome).toUpperCase());
+  if (relac.length) {
+    const indevido = /(aptid|sucess[aã]o|papel d[ae]|papel na|alienant|alienar|titular(idade)? registral|consta como|como vendedor|titular\/vendedor|esclarecer o papel)/i;
+    const ehIndevido = x => {
+      if (!x) return false;
+      const t = [_textoDe(x), x.descricao, x.campo, x.fonte].filter(Boolean).join(" ");
+      return relac.some(n => t.toUpperCase().includes(n)) && indevido.test(t);
+    };
+    saida.condicionantes = saida.condicionantes.filter(c => !ehIndevido(c));
+    saida.pendencias = saida.pendencias.filter(p => !ehIndevido(p));
+    saida.alertas = saida.alertas.filter(a => !ehIndevido(a));
+  }
+
+  // (3) Seção 1 sempre presente
+  const im = fatos && fatos.imovel || {};
+  const nomes = arr => (Array.isArray(arr) ? arr : []).map(p => p && p.nome).filter(Boolean).join("; ");
+  saida.imovel = Object.assign({
+    descricao: im.descricao || null,
+    matricula: im.matricula || null,
+    ri: im.ri || null,
+    vendedor: nomes(fatos && fatos.vendedores) || null,
+    comprador: (fatos && fatos.comprador) || nomes(fatos && fatos.compradores) || null,
+    preco: (fatos && fatos.negocio && fatos.negocio.preco) ? ("R$ " + Number(fatos.negocio.preco).toLocaleString("pt-BR", { minimumFractionDigits: 2 })) : null,
+    forma_pagamento: (fatos && fatos.negocio && fatos.negocio.forma_pagamento) || null
+  }, Object.fromEntries(Object.entries(saida.imovel || {}).filter(([, v]) => v)));
 }
 
 async function gerarParecer(fatos) {
   if (!fatos || typeof fatos !== "object") throw new Error("FATOS ausentes ou inválidos");
   const saida = await chamarClaude(fatos);
   garantirCondicionantes(saida, fatos);   // <-- trava determinística: §6 espelha as pendências
+  posProcessar(saida, fatos);             // <-- matrícula, empresa relacionada, títulos, Seção 1
   saida._validacao = validar(saida);
   return saida;
 }
