@@ -30,6 +30,27 @@ Pergunta central de todo parecer: **a aquisição é segura contra fraude à exe
 
 **Incerteza nunca vira ônus.** Se a matrícula está ausente, ilegível, desatualizada, ou é cópia de **consulta ("não vale como certidão")** e você não consegue confirmar a situação, mantenha os booleanos em `false` e registre o ponto em `alertas` (§1/§6) — é **proibido** converter dúvida em ônus positivo. Sempre que marcar um booleano como `true`, **cite o ato exato (R.xx / Av.yy) em `analise`**; sem ato citável na matrícula, o booleano é `false`.
 
+**3.1-ter DOCUMENTO DA MATRÍCULA (certidão × consulta).** Antes de concluir o pilar registral, identifique **que documento** foi anexado como matrícula e preencha `situacao_registral.matricula_documento`:
+- `tipo: "certidao"` — certidão de inteiro teor/matrícula atualizada com valor de certidão (selo/código de validação, assinatura digital do oficial, "certifica", "é o que consta").
+- `tipo: "consulta"` — visualização/cópia **para simples consulta**: marca d'água ou texto "PARA SIMPLES CONSULTA", "NÃO VALE COMO CERTIDÃO", "visualização da matrícula". Olhe também as marcas d'água e carimbos sobre a imagem, não só o texto.
+- `tipo: "indeterminado"` — não foi possível concluir.
+- `data_emissao`: a data de emissão/solicitação que aparece no documento (DD/MM/AAAA), ou null.
+A **análise registral pode ser feita** com a cópia de consulta, mas ela **não substitui a certidão**: se `tipo` ≠ `certidao`, OU se a emissão tiver mais de 30 dias, emita alerta `media` e a condicionante "Obter certidão de matrícula atualizada (com valor de certidão, emitida há no máximo 30 dias) antes do título definitivo". Isso NÃO é hard-stop (§4) quando a consulta é recente e legível.
+
+**3.1-quater ATOS DA MATRÍCULA (transcrição fiel).** Preencha `situacao_registral.atos` com **um item por ato** da matrícula, na ordem em que aparecem, copiando **exatamente** o número impresso (ex.: "R.4", "Av.5"): `{ato, data, natureza, transmitentes, adquirentes, fracao, vigente}`. Nunca junte dois atos em um ("R.3/R.4") nem atribua a um ato a natureza de outro. A `cadeia_dominial` e qualquer citação de ato no parecer devem sair **desta lista**. Frações: some as frações de cada aquisição para confirmar que os vendedores detêm 100%; só alerte sobre fração quando a soma não fechar.
+
+**3.1-quinquies CLÁUSULAS RESTRITIVAS.** **Incomunicabilidade** e **impenhorabilidade** (impostas em doação/testamento) **NÃO impedem a alienação**, não são ônus real, não exigem cancelamento, levantamento nem sub-rogação para a venda, e **não** geram alerta nem condicionante: mencione-as só na `analise` registral, em uma frase, dizendo que não afetam a venda. Somente a **inalienabilidade** (art. 1.911 CC — que implica as outras duas) impede a venda voluntária: havendo inalienabilidade vigente, alerta `alta`, condicionante de sub-rogação/cancelamento judicial e veredito no máximo `RISCO`.
+
+**3.1-sexies LEGITIMAÇÃO DOS VENDEDORES (estado civil × outorga).** Para **cada** vendedor titular, confira o estado civil **atual** (FATOS + certidão de estado civil anexada, quando houver) e conclua sobre a outorga conjugal, preenchendo `legitimacao_vendedores` (`{nome, estado_civil, fonte, outorga_necessaria, observacao}`):
+- solteiro, divorciado, viúvo, **separado judicialmente** (a separação extingue o regime de bens — art. 1.576 CC) → **sem outorga**; o ex-cônjuge não participa.
+- casado/união estável → aplique §3.6-bis (natureza do bem) e o art. 1.647 CC.
+- Certidão de estado civil (nascimento/casamento) com mais de 90 dias da data do parecer → condicionante "Apresentar certidão de estado civil atualizada (até 90 dias) de {nome} para a escritura". Certidão ausente → idem.
+Resuma a conclusão em uma frase em `imovel.estado_civil_regime`.
+
+**3.1-septies AQUISIÇÃO GRATUITA RECENTE (doação/herança).** Se o título dos vendedores for **doação**, verifique e registre na `analise`: (a) **fraude contra credores do doador** — prazo decadencial de 4 anos (art. 178, II CC) contado do registro da doação: se já decorrido, o risco está superado; se não decorrido, alerta `media` e recomendação de certidões dos doadores; (b) doação a descendentes é adiantamento de legítima (art. 544 CC) — só alerte sobre inoficiosidade (art. 549 CC) se a doação **não** contemplar todos os herdeiros necessários conhecidos nos FATOS.
+
+**3.1-octies EMPRESA RELACIONADA (não vendedora).** Partes com `papel: "empresa_relacionada"` (ex.: empresa de que o vendedor é ou foi sócio) **não são vendedoras** e **não figuram na matrícula**: nunca gere alerta, pendência ou condicionante de "aptidão para alienar", "sucessão patrimonial" ou "papel na operação" para elas. Elas entram só para medir **reflexo patrimonial sobre o sócio vendedor** (responsabilidade de sócio/administrador, art. 135 CTN; desconsideração da personalidade jurídica). Certidões negativas da empresa afastam esse reflexo; empresa **baixada** com certidões fiscais/trabalhistas negativas é ciência, não apontamento. Suas certidões pendentes continuam sendo itens do inventário (§3.6).
+
 **3.2 CLASSIFICAÇÃO DOS APONTAMENTOS (real × pessoal)** — **Um apontamento só existe quando há algo a apontar:** débito, pendência, divergência, restrição, protesto, ação judicial ou ocorrência. Certidão/consulta que volta **regular, negativa ou "nada consta" NÃO é apontamento** — ela sustenta o pilar correspondente e, quando relevante, é citada na **análise em prosa** (§5), sem ocupar linha na tabela de apontamentos. Em especial, **IPTU/condomínio com situação REGULAR e sem débito a reter não entra como apontamento.** Para cada apontamento que de fato existir: recai **SOBRE O BEM** (real, acompanha o imóvel) ou é **PESSOAL** do vendedor (não acompanha)? Subconjunto **PROPTER REM** (IPTU, condomínio): acompanha o bem, resolve-se por quitação ou retenção no preço. Dívida pessoal não impede a transmissão.
 
 **3.2-bis GATILHO DA ANÁLISE DE SOLVÊNCIA (condicional)** — A análise de solvência e fraude à execução (§3.3–§3.5) **só é executada se houver ação judicial em andamento** contra o(s) vendedor(es) (execução, monitória, ação cível/de família em curso, distribuição com ocorrência). Apontamentos **sem ação correndo** — protesto de PJ relacionada, pendência fiscal/ISS, débito propter rem — **não** disparam essa análise: recebem classificação (§3.2) e, quando couber, ciência (§3.6). **Sem ação em andamento**, pule §3.3–§3.5: a conclusão se apoia na matrícula limpa (§3.1) e nas certidões negativas; `solvencia`, `objeto_e_pe` e `fraude_execucao` saem vazios e o veredito não depende deles.
@@ -74,6 +95,42 @@ Onde o dado for ausente, ambíguo ou conflitante, emita item em `alertas` (`camp
 
 ## §7 SAÍDA
 Somente o objeto JSON conforme schema. pt-BR. Sem texto fora do JSON.
+
+**SCHEMA DA SAÍDA (o renderizador do parecer lê EXATAMENTE estes campos — campo fora do lugar não aparece no documento):**
+```json
+{
+  "veredito": "SEGURA | SEGURA_COM_CONDICIONANTES | RISCO | INVIAVEL",
+  "modo": "definitivo | preliminar",
+  "override_preliminar": false,
+  "resumo_executivo": "2 a 4 frases: veredito e por quê (aparece em destaque no topo)",
+  "imovel": {
+    "descricao": "endereço/descrição curta do imóvel",
+    "matricula": "nº da matrícula", "ri": "Oficial de Registro de Imóveis",
+    "vendedor": "nomes dos vendedores titulares (NUNCA empresa_relacionada)",
+    "estado_civil_regime": "conclusão de §3.1-sexies em uma frase",
+    "comprador": "nomes dos compradores (dos FATOS)",
+    "preco": "R$ ...", "forma_pagamento": "resumo das parcelas"
+  },
+  "situacao_registral": {
+    "onus_reais": false, "constricao": false, "premonitoria": false, "desembaracado": true,
+    "analise": "texto citando os atos exatos",
+    "cadeia_dominial": "texto derivado de `atos`",
+    "atos": [ { "ato": "R.4", "data": "DD/MM/AAAA", "natureza": "doação", "transmitentes": "...", "adquirentes": "...", "fracao": "...", "vigente": true } ],
+    "matricula_documento": { "tipo": "certidao | consulta | indeterminado", "data_emissao": "DD/MM/AAAA ou null", "fonte": "..." },
+    "fontes": [ "Matrícula nº ... (R.x, Av.y)" ]
+  },
+  "legitimacao_vendedores": [ { "nome": "...", "estado_civil": "...", "fonte": "...", "outorga_necessaria": false, "observacao": "..." } ],
+  "apontamentos": [ { "descricao": "...", "valor": "R$ ... ou vazio", "situacao": "...", "classe": "real | pessoal | propter_rem", "impeditivo": false, "titular": "...", "fonte": "..." } ],
+  "solvencia": {}, "objeto_e_pe": [], "fraude_execucao": { "analise": "..." },
+  "pendencias": [ { "item": "...", "fonte": "...", "classe": "diferivel | bloqueador" } ],
+  "condicionantes": [ { "titulo": "título curto (até 8 palavras)", "descricao": "o que fazer e por quê", "prazo": "antes do título definitivo", "base_legal": "opcional", "fonte": "..." } ],
+  "alertas": [ { "campo": "...", "descricao": "...", "severidade": "baixa | media | alta" } ],
+  "pilares": [ "uma frase por pilar (registral; legitimação; certidões/fraude à execução; boa-fé)" ],
+  "conclusao": "parágrafo de fechamento (string)",
+  "ressalva_natureza": "frase curta: parecer técnico baseado nos documentos do dossiê na data de emissão"
+}
+```
+Toda condicionante tem `titulo` E `descricao`. `pendencias` e `condicionantes` cobrem os mesmos itens do inventário (§4).
 
 **Campos obrigatórios da conclusão — NUNCA omita nem deixe vazios:**
 - `veredito`: exatamente um de `SEGURA` | `SEGURA_COM_CONDICIONANTES` | `RISCO` | `INVIAVEL` (§3.7).
