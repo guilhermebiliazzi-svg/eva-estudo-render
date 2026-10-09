@@ -317,6 +317,15 @@ function posProcessar(saida, fatos) {
   // (1b) cadeia dominial montada dos atos (o modelo às vezes junta "R.3/R.4")
   if (Array.isArray(sr.atos) && sr.atos.length) {
     const regs = sr.atos.filter(a => a && /^R\.?\s*\d/i.test(String(a.ato || "")));
+    // mesmo número de ato lido duas vezes (ex.: R.4 "venda e compra" e R.4 "doação") = leitura ambígua
+    const norm = a => String(a.ato || "").replace(/\s+/g, "").toUpperCase();
+    const repetidos = [...new Set(regs.map(norm).filter((x, i, arr) => arr.indexOf(x) !== i))];
+    if (repetidos.length) {
+      regs.forEach(a => { if (repetidos.includes(norm(a))) a.natureza = (a.natureza || "ato") + " (?)"; });
+      if (!saida.alertas.some(a => /leitura amb[ií]gua/i.test(String(a && a.descricao)))) {
+        saida.alertas.push({ campo: "situacao_registral.atos", descricao: "Leitura ambígua da matrícula: o(s) ato(s) " + repetidos.join(", ") + " foram lidos mais de uma vez com conteúdos diferentes. Conferir a cadeia dominial diretamente na matrícula (a cópia de consulta com marca d'água dificulta a leitura).", severidade: "media" });
+      }
+    }
     if (regs.length) {
       sr.cadeia_dominial = regs.map(a => {
         const partes = [a.transmitentes, a.adquirentes].filter(Boolean).join(" → ");
