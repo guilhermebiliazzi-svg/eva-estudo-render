@@ -334,7 +334,7 @@ function posProcessar(saida, fatos) {
     if (anos !== null && anos >= 4) frase += "já decorrido o prazo decadencial de 4 anos (art. 178, II, do Código Civil), está superado o risco de anulação por fraude contra credores do doador.";
     else if (anos !== null) frase += "ainda corre o prazo decadencial de 4 anos (art. 178, II, do Código Civil) para eventual anulação por fraude contra credores do doador — recomendam-se certidões dos doadores.";
     else frase += "data do registro não identificada; verificar o prazo de 4 anos (art. 178, II, do Código Civil) para fraude contra credores do doador.";
-    if (ag.observacao) frase += " " + ag.observacao;
+    if (ag.observacao && !/178|decadencial|fraude contra credores/i.test(ag.observacao)) frase += " " + ag.observacao;
     if (!String(sr.analise || "").includes("178")) sr.analise = (sr.analise ? sr.analise + " " : "") + frase;
     if (anos !== null && anos < 4 && !saida.alertas.some(a => /doa[cç][aã]o|doador/i.test(String(a && a.descricao)))) {
       saida.alertas.push({ campo: "situacao_registral.aquisicao_gratuita", descricao: frase, severidade: "media" });
