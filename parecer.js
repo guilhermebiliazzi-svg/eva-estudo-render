@@ -184,8 +184,13 @@ function cobreItem(txt, nome, titular) {
   const alvo = ks.length ? ks : (String(nome || "").toLowerCase().match(/[a-zà-ú0-9]{3,}/gi) || []);
   if (!alvo.length) return false;
   const hit = alvo.filter(k => t.includes(k)).length;
-  if (hit < Math.min(2, alvo.length)) return false;
-  if (titular) { const p1 = String(titular).toLowerCase().split(/\s+/)[0]; if (p1 && !t.includes(p1)) return false; }
+  if (hit < Math.max(1, Math.ceil(alvo.length / 2))) return false;
+  if (titular && !/^(rua|r\.|av|avenida|alameda|al\.|travessa|pra[cç]a|estrada|rodovia)\b/i.test(String(titular).trim())) {
+    const tl = String(titular).toLowerCase();
+    const p1 = tl.split(/\s+/)[0];
+    const ehPJ = /\b(ltda|s\/?a|eireli|me|epp|cia)\b/i.test(tl);
+    if (p1 && !t.includes(p1) && !(ehPJ && /empresa/.test(t))) return false;
+  }
   return true;
 }
 
@@ -308,6 +313,47 @@ function posProcessar(saida, fatos) {
       saida.alertas.push({ campo: "situacao_registral.matricula_documento", descricao: "Análise registral feita sobre documento que não é certidão atualizada: " + motivo + ".", severidade: "media" });
     }
   }
+
+  // (1b) cadeia dominial montada dos atos (o modelo às vezes junta "R.3/R.4")
+  if (Array.isArray(sr.atos) && sr.atos.length) {
+    const regs = sr.atos.filter(a => a && /^R\.?\s*\d/i.test(String(a.ato || "")));
+    if (regs.length) {
+      sr.cadeia_dominial = regs.map(a => {
+        const partes = [a.transmitentes, a.adquirentes].filter(Boolean).join(" → ");
+        return String(a.ato).trim() + (a.data ? " (" + a.data + ")" : "") + " — " + (a.natureza || "ato") +
+          (partes ? ": " + partes : "") + (a.fracao ? " [" + a.fracao + "]" : "");
+      }).join("; ") + ".";
+    }
+  }
+  // (1c) aquisição gratuita: a conclusão sobre fraude contra credores do doador vai para a análise
+  const ag = sr.aquisicao_gratuita;
+  if (ag && ag.titulo) {
+    const reg = _dataBR(ag.data_registro);
+    const anos = reg ? (Date.now() - reg.getTime()) / (365.25 * 86400000) : null;
+    let frase = "Aquisição a título gratuito (" + ag.titulo + (ag.ato ? ", " + ag.ato : "") + (ag.data_registro ? ", registrada em " + ag.data_registro : "") + "): ";
+    if (anos !== null && anos >= 4) frase += "já decorrido o prazo decadencial de 4 anos (art. 178, II, do Código Civil), está superado o risco de anulação por fraude contra credores do doador.";
+    else if (anos !== null) frase += "ainda corre o prazo decadencial de 4 anos (art. 178, II, do Código Civil) para eventual anulação por fraude contra credores do doador — recomendam-se certidões dos doadores.";
+    else frase += "data do registro não identificada; verificar o prazo de 4 anos (art. 178, II, do Código Civil) para fraude contra credores do doador.";
+    if (ag.observacao) frase += " " + ag.observacao;
+    if (!String(sr.analise || "").includes("178")) sr.analise = (sr.analise ? sr.analise + " " : "") + frase;
+    if (anos !== null && anos < 4 && !saida.alertas.some(a => /doa[cç][aã]o|doador/i.test(String(a && a.descricao)))) {
+      saida.alertas.push({ campo: "situacao_registral.aquisicao_gratuita", descricao: frase, severidade: "media" });
+    }
+  }
+  // (1d) certidão de estado civil com mais de 90 dias (ou sem data) => atualizar para a escritura
+  (Array.isArray(saida.legitimacao_vendedores) ? saida.legitimacao_vendedores : []).forEach(l => {
+    if (!l || !l.nome) return;
+    if (/solteir/i.test(String(l.estado_civil || "")) && !l.data_certidao_estado_civil) return; // nascimento: segue a regra geral abaixo só se houver data
+    const dc = _dataBR(l.data_certidao_estado_civil);
+    const velha = !dc || (Date.now() - dc.getTime()) / 86400000 > 90;
+    if (!velha) return;
+    const nome = String(l.nome).trim();
+    const ja = saida.condicionantes.some(c => /estado civil|casamento|nascimento/i.test((c.titulo || "") + " " + (c.descricao || "")) && String((c.titulo || "") + " " + (c.descricao || "")).toUpperCase().includes(nome.split(/\s+/)[0].toUpperCase()));
+    if (ja) return;
+    const motivo = dc ? "a certidão apresentada é de " + l.data_certidao_estado_civil : "a certidão apresentada não tem data identificada";
+    saida.condicionantes.push({ titulo: "Certidão de estado civil atualizada — " + nome.split(/\s+/)[0], descricao: "Apresentar certidão de " + (/solteir/i.test(String(l.estado_civil || "")) ? "nascimento" : "casamento") + " atualizada (emitida há no máximo 90 dias) de " + nome + " para a escritura — " + motivo + ".", prazo: "antes do título definitivo", fonte: "legitimacao_vendedores" });
+    saida.pendencias.push({ item: "Certidão de estado civil atualizada (até 90 dias) — " + nome, fonte: "legitimacao_vendedores", classe: "diferivel" });
+  });
 
   // (2) empresa relacionada: fora de alertas/pendências/condicionantes de legitimação
   const relac = (Array.isArray(fatos && fatos.partes) ? fatos.partes : [])
