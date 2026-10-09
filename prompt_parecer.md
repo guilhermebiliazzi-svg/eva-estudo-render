@@ -117,9 +117,10 @@ Somente o objeto JSON conforme schema. pt-BR. Sem texto fora do JSON.
     "cadeia_dominial": "texto derivado de `atos`",
     "atos": [ { "ato": "R.4", "data": "DD/MM/AAAA", "natureza": "doação", "transmitentes": "...", "adquirentes": "...", "fracao": "...", "vigente": true } ],
     "matricula_documento": { "tipo": "certidao | consulta | indeterminado", "data_emissao": "DD/MM/AAAA ou null", "fonte": "..." },
+    "aquisicao_gratuita": { "titulo": "doação | herança | null se a aquisição foi onerosa", "ato": "R.x", "data_registro": "DD/MM/AAAA", "observacao": "doação a todos os descendentes? reserva de usufruto?" },
     "fontes": [ "Matrícula nº ... (R.x, Av.y)" ]
   },
-  "legitimacao_vendedores": [ { "nome": "...", "estado_civil": "...", "fonte": "...", "outorga_necessaria": false, "observacao": "..." } ],
+  "legitimacao_vendedores": [ { "nome": "...", "estado_civil": "...", "fonte": "...", "data_certidao_estado_civil": "DD/MM/AAAA (data de EMISSÃO da certidão anexada) ou null", "outorga_necessaria": false, "observacao": "..." } ],
   "apontamentos": [ { "descricao": "...", "valor": "R$ ... ou vazio", "situacao": "...", "classe": "real | pessoal | propter_rem", "impeditivo": false, "titular": "...", "fonte": "..." } ],
   "solvencia": {}, "objeto_e_pe": [], "fraude_execucao": { "analise": "..." },
   "pendencias": [ { "item": "...", "fonte": "...", "classe": "diferivel | bloqueador" } ],
