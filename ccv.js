@@ -27,15 +27,34 @@ const PROMPT_PATH = process.env.PROMPT_CCV || path.join(__dirname, "prompt_ccv.m
 //   dois titulares casados entre si -> "FULANO, ..., e FULANA, ..., casados ..., residentes ...".
 
 const clean = s => String(s || '').replace(/\D/g, '');
-const gen = p => { const n = String(p && p.nacionalidade || '').toLowerCase().trim(); return n.endsWith('a') ? 'f' : (n.endsWith('o') ? 'm' : 'x'); };
+// Gênero: o campo "Gênero" do formulário manda; a nacionalidade é só o último recurso
+// (antes, "Brasileira" digitado para um homem virava "portadora/inscrita/divorciada").
+const gen = p => {
+  const g = String(p && p.genero || '').toLowerCase().trim();
+  if (/^(m|masc)/.test(g)) return 'm';
+  if (/^(f|fem)/.test(g)) return 'f';
+  const n = String(p && p.nacionalidade || '').toLowerCase().trim();
+  return n.endsWith('a') ? 'f' : (n.endsWith('o') ? 'm' : 'x');
+};
+// "Brasileira"/"BRASILEIRO" -> "brasileiro|brasileira" conforme o gênero da pessoa
+function nacionalidadeTxt(p) {
+  const n = String(p && p.nacionalidade || '').trim().toLowerCase();
+  if (!n) return '';
+  const g = gen(p);
+  if (/^brasileir[oa]$/.test(n)) return W(g, 'brasileiro', 'brasileira');
+  if (g !== 'x' && /[oa]$/.test(n)) return n.slice(0, -1) + (g === 'f' ? 'a' : 'o');
+  return n;
+}
+// profissão em minúscula no meio da frase ("Aposentado" -> "aposentado"), sem mexer em siglas
+const profissaoTxt = s => { const v = String(s || '').trim(); return /^[A-ZÀ-Ú][a-zà-ú]/.test(v) ? v.charAt(0).toLowerCase() + v.slice(1) : v; };
 const W = (g, m, f) => g === 'f' ? f : (g === 'm' ? m : (m + '(a)'));
 const nomeBold = s => '**' + String(s || '').trim() + '**';
 
 function identidade(p) {
   const g = gen(p);
   const segs = [nomeBold(p.nome)];
-  if (p.nacionalidade) segs.push(p.nacionalidade);
-  if (p.profissao) segs.push(p.profissao);
+  if (p.nacionalidade) segs.push(nacionalidadeTxt(p));
+  if (p.profissao) segs.push(profissaoTxt(p.profissao));
   if (p.rg) segs.push(W(g, 'portador', 'portadora') + ' do RG nº ' + p.rg + (p.rg_orgao ? (' — ' + p.rg_orgao) : ''));
   if (p.cpf) segs.push(W(g, 'inscrito', 'inscrita') + ' no CPF sob o nº ' + p.cpf);
   if (p.email) segs.push('e-mail ' + p.email);
@@ -47,7 +66,9 @@ function estadoCivilSimples(p) {
   if (ec.startsWith('divorc')) return W(g, 'divorciado', 'divorciada');
   if (ec.startsWith('vi')) return W(g, 'viúvo', 'viúva');
   if (ec.startsWith('cas')) return W(g, 'casado', 'casada');
-  return p.estado_civil || '[a completar: estado civil]';
+  if (ec.startsWith('separ')) return W(g, 'separado judicialmente', 'separada judicialmente');
+  if (ec.startsWith('uni')) return W(g, 'convivente em união estável', 'convivente em união estável');
+  return p.estado_civil_texto || p.estado_civil || '[a completar: estado civil]';
 }
 const REGIME_TXT = {
   'comunhao_parcial':'comunhão parcial de bens','comunhao_universal':'comunhão universal de bens',
@@ -64,9 +85,11 @@ function enderecoFrase(p, plural) {
 }
 function conjugeSegs(c) {
   const g = gen(c), segs = [nomeBold(c.nome)];
-  if (c.nacionalidade) segs.push(c.nacionalidade);
-  if (c.profissao) segs.push(c.profissao);
+  if (c.nacionalidade) segs.push(nacionalidadeTxt(c));
+  if (c.profissao) segs.push(profissaoTxt(c.profissao));
+  if (c.rg) segs.push(W(g, 'portador', 'portadora') + ' do RG nº ' + c.rg);
   if (c.cpf) segs.push(W(g, 'inscrito', 'inscrita') + ' no CPF sob o nº ' + c.cpf);
+  if (c.email) segs.push('e-mail ' + c.email);
   return segs.join(', ');
 }
 function qualificarUm(p) {
