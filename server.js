@@ -45,6 +45,7 @@ const app = express();
 app.use(express.json({ limit: "50mb" }));
 require("./preencher_pdf")(app);
 require("./recibo_repasse")(app, pool);  // executa na hora, sem guardar
+require("./protesto_pdf")(app);      // PDF da consulta de protestos (DirectD) para o card do CENPROT
 require("./serpro_cnd")(app);       // proxy SERPRO (contorno DNS n8n Cloud)
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
