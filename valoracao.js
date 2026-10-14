@@ -94,6 +94,13 @@ function ajusteEstado({ reforma_ano, reforma_padrao, estado, areaUtil, anoRef })
   return { valor: 0, frase: "" }; // "bom"/conservado/sem info → estado típico da âncora (neutro)
 }
 
+// v3.9 (14/10) · "unidade idêntica" = mesma planta. A área total do IPTU/ITBI varia 1 m² entre
+// unidades da mesma coluna/andar (arredondamento, fração de área comum) — o match exato (±0,05)
+// descartava 4 de 5 vendas idênticas (Estudo 80: 62 m² × 63 m²) e ancorava numa venda isolada.
+// Tolerância: o maior entre 1,5 m² e 2,5% da área total.
+const tolArea = at => Math.max(1.5, Number(at) * 0.025);
+const areaIdentica = (a, at) => Number(at) > 0 && Number(a) > 0 && Math.abs(Number(a) - Number(at)) <= tolArea(at) + 1e-9;
+
 function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const desagio   = opts.desagio ?? 0.05;   // pedido -> fechamento
   const hoje      = new Date();
@@ -185,8 +192,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
 
   // ===== v2 · UNIDADES IDÊNTICAS EM ÁREA (área construída ITBI === área total IPTU informada) =====
   const areaOf = v => Number(v.area_m2 ?? v.area ?? 0);
-  const EPS = 0.05; // tolerância só para ruído de ponto flutuante — o match é exato (IPTU = ITBI)
-  const equivalentes = areaTotal ? unidades.filter(v => Math.abs(areaOf(v) - areaTotal) < EPS) : [];
+  const equivalentes = areaTotal ? unidades.filter(v => areaIdentica(areaOf(v), areaTotal)) : [];
   // modo: "equivalente" (há venda de unidade idêntica) | "global" (área informada, sem idêntica) | "legado" (sem area_total)
   const modo = !areaTotal ? "legado" : (equivalentes.length ? "equivalente" : "global");
 
@@ -262,7 +268,11 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const tetoCorrecao = aV * fator;
 
   // 3) teto de concorrência = menor anúncio equivalente NO MESMO prédio
-  const mesmoPredio = amostras.filter(a => a.tipo === "mesmo_predio" && Number(a.valor) > 0);
+  //    v3.9 · "equivalente" exige área útil similar (±10%) — anúncio de outra planta no mesmo prédio
+  //    não é concorrente direto (Estudo 80: anúncio de 125 m² virou "concorrente" de um ap de 43 m²).
+  const areaNumMP = a => { const m = String(a.area ?? "").match(/[\d.,]+/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
+  const mesmoPredio = amostras.filter(a => a.tipo === "mesmo_predio" && Number(a.valor) > 0 &&
+    (!areaUtil || (areaNumMP(a) > 0 && Math.abs(areaNumMP(a) - areaUtil) <= areaUtil * 0.10)));
   const tetoConc = mesmoPredio.length ? Math.min(...mesmoPredio.map(a => Number(a.valor))) : Infinity;
   const concorrente = mesmoPredio.length
     ? mesmoPredio.reduce((m,a)=> Number(a.valor) < Number(m.valor) ? a : m)
@@ -365,24 +375,29 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   if (mobiliaValor > 0) anuncio = valorMerc + mobiliaValor;
   const faixaMax    = anuncio;
 
+  // v3.9 · nota das vagas retiradas (vendas com mais vagas que o avaliado)
+  const comVagaRetirada = unidades.filter(v => v.vagas_retiradas > 0);
+  const notaVagas = comVagaRetirada.length
+    ? `As vendas do prédio incluíam vaga e a unidade avaliada ${Number(opts.vagas) > 0 ? `tem ${opts.vagas} vaga${Number(opts.vagas)===1?"":"s"}` : "não tem vaga"}: a vaga a mais foi retirada de cada venda pelo valor declarado no próprio ITBI (média de ${mi(comVagaRetirada.reduce((s,v)=>s+v.vaga_retirada_valor,0)/comVagaRetirada.length)} por venda).`
+    : "";
   // labels
   const vagasAnchor = (String(anchor.unidade||"").match(/(\d+)\s*vagas?/i)||[])[1]
                    || (String(anchor.unidade||"").match(/(\d+)\s*VG/i)||[])[1];
   const ancoraCurto = `${MESES[aD.mes-1]}/${aD.ano}`;
-  const identicaTag = (modo === "equivalente") ? ` · unidade idêntica (${areaFmt(areaTotal)} m²)` : "";
+  const identicaTag = (modo === "equivalente") ? ` · mesma planta (${areaFmt(areaOf(anchor))} m²)` : "";
   const ancoraFrase = (modo === "equivalente")
-    ? `Ancorado na venda real de unidade IDÊNTICA em área (${areaFmt(areaTotal)} m² IPTU) do próprio prédio (ITBI)`
+    ? `Ancorado na venda real de unidade da MESMA PLANTA (${areaFmt(areaOf(anchor))} m² IPTU; avaliada ${areaFmt(areaTotal)} m²) do próprio prédio (ITBI)`
     : `Ancorado na venda real do próprio prédio (ITBI)`;
 
   return {
     ...blocoM2,
     concorrente_valor: concorrente ? milhoes(Number(concorrente.valor)) : milhoes(tetoCorrecao),
     concorrente_label: concorrente
-      ? `unidade equivalente${concorrente.vagas?`, ${concorrente.vagas} vagas`:""}, já anunciada`
+      ? `unidade equivalente${concorrente.vagas?`, ${concorrente.vagas} vaga${Number(concorrente.vagas)===1?"":"s"}`:""}, já anunciada`
       : `teto pela correção monetária · IPCA ${pct(fator)}`,
     concorrente_origem: concorrente ? "anuncio" : "calculado",
     ancora_valor: milhoes(aV),
-    ancora_label: `${ancoraCurto} · mesmo prédio${identicaTag}${vagasAnchor?` · ${vagasAnchor} vagas`:""}`,
+    ancora_label: `${ancoraCurto} · mesmo prédio${identicaTag}${anchor.vagas_retiradas > 0 ? (Number(opts.vagas) > 0 ? ` · com ${opts.vagas} vaga${Number(opts.vagas)===1?"":"s"}` : " · sem a vaga") : (vagasAnchor?` · ${vagasAnchor} vaga${Number(vagasAnchor)===1?"":"s"}`:"")}`,
     ancora_curto: ancoraCurto,
     ipca_pct: pct(fator),
     valor_mercado: milhoes(valorMerc),
@@ -397,6 +412,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       : (concorrente
           ? `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); a unidade equivalente anunciada no mesmo prédio (${milhoes(Number(concorrente.valor))}) está acima e serve só de teto de referência.`
           : `${ancoraFrase} corrigida pelo IPCA (${pct(fator)}); não há anúncio equivalente no prédio para calibrar o teto.`))
+      + (notaVagas ? ` ${notaVagas}` : "")
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
       + (mobiliaValor > 0 ? ` Venda porteira fechada: mobília inclusa estimada em ${mi(mobiliaValor)} — somada apenas ao anúncio sugerido (${milhoes(anuncio)}); o valor do imóvel em si segue o competitivo/potencial.` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
@@ -440,4 +456,4 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   };
 }
 
-module.exports = { buildValoracao, ipcaFactor };
+module.exports = { buildValoracao, ipcaFactor, areaIdentica, tolArea };
