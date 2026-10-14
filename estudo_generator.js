@@ -17,6 +17,7 @@
  */
 const pptxgen = require("pptxgenjs");
 const { vendidosAggregatedFromRows } = require("./itbi_format");
+const { areaIdentica, tolArea } = require("./valoracao");
 const { addDecisaoTempoSlides } = require("./decisao_tempo_slide");
 
 const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
@@ -87,7 +88,7 @@ function buildEstudo(data, opts={}){
   // preferência: flag `equivalente` marcada pelo orchestrator sobre os números CRUS (exata);
   // fallback: comparação sobre a área formatada (caminho blindagem, linhas cruas no body)
   const ehAreaIdentica = v => v.equivalente === true ||
-    (areaTotalRef != null && Math.abs(numOf(v.area) - areaTotalRef) < 0.05);
+    (areaTotalRef != null && areaIdentica(numOf(v.area), areaTotalRef));
 
   const edata = (typeof data.estudo_data === "string" && data.estudo_data.trim())
               || new Date().toLocaleDateString("pt-BR");
@@ -321,6 +322,9 @@ function buildEstudo(data, opts={}){
       partes.push({text:"Azul",options:{color:LINK,bold:true}});
       partes.push({text:" = link do anúncio.",options:{color:INK}});
       nota=partes;
+    } else if (!amostras.some(a => a.tipo !== "avaliando")) {
+      // v3.9 · sem anúncio aprovado: diz isso em vez de deixar a tabela vazia sem explicação
+      nota=[{text:"Nenhum anúncio ativo de área similar foi aprovado para este estudo — o valor se apoia nas vendas reais do prédio (ITBI).",options:{color:INK,italic:true}}];
     } else {
       nota=[{text:data.amostras_nota||"Comparáveis ativos do mesmo perfil.",options:{color:INK}}];
     }
@@ -435,9 +439,12 @@ function buildEstudo(data, opts={}){
       }
     }
     const notaIdenticas = areaTotalRef != null
-      ? `  ·  Destaque: unidades com a MESMA área total da avaliada (${areaFmt(areaTotalRef)} m² IPTU) — só elas se comparam diretamente; o m² útil delas usa a área útil informada.`
+      ? `  ·  Destaque: unidades da mesma planta da avaliada (${areaFmt(areaTotalRef)} m² IPTU, ±${areaFmt(Math.round(tolArea(areaTotalRef)*10)/10)} m²) — só elas se comparam diretamente.`
       : "";
-    s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios.${notaIdenticas}${trunc?`  ·  ${allVend.length} transações no total; exibindo ${vend.length}.`:""}`,
+    const notaVagasTab = data.vagas_retiradas != null
+      ? `  ·  Valores ${Number(data.vagas_retiradas) > 0 ? `com ${data.vagas_retiradas} vaga${Number(data.vagas_retiradas)===1?"":"s"}` : "sem a vaga"}, como a avaliada: a vaga vendida junto saiu pelo valor declarado no ITBI.`
+      : "";
+    s.addText(`* Área construída (IPTU, inclui áreas comuns) — base diferente do m² útil dos anúncios.${notaIdenticas}${notaVagasTab}${trunc?`  ·  ${allVend.length} transações no total; exibindo ${vend.length}.`:""}`,
       {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     footer(s,10);
   }
