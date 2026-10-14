@@ -40,18 +40,27 @@ async function saveAmostras(pool, phone, amostras) {
 }
 
 async function getAmostras(pool, phone) {
+  const r = await getAmostrasSessao(pool, phone);
+  return r.amostras;
+}
+
+// v2 (14/10) · devolve também a idade da sessão — o /estudo só reaproveita amostras RECENTES
+// e do MESMO imóvel (caso Estudo 80: amostras de um estudo antigo de 124 m² entraram num de 43 m²).
+async function getAmostrasSessao(pool, phone) {
   const ph = normPhone(phone);
-  if (!pool || !ph) return [];
+  if (!pool || !ph) return { amostras: [], idade_h: null };
   try {
     await ensure(pool);
     const { rows } = await pool.query(
-      `SELECT amostras FROM amostras_sessao WHERE phone = $1 LIMIT 1`,
+      `SELECT amostras, EXTRACT(EPOCH FROM (NOW() - updated_at)) / 3600.0 AS idade_h
+         FROM amostras_sessao WHERE phone = $1 LIMIT 1`,
       [ph]
     );
-    return Array.isArray(rows[0]?.amostras) ? rows[0].amostras : [];
+    if (!rows[0]) return { amostras: [], idade_h: null };
+    return { amostras: Array.isArray(rows[0].amostras) ? rows[0].amostras : [], idade_h: Number(rows[0].idade_h) };
   } catch (e) {
     console.error("getAmostras error:", e.message);
-    return [];
+    return { amostras: [], idade_h: null };
   }
 }
 
@@ -61,4 +70,4 @@ async function clearAmostras(pool, phone) {
   await pool.query(`DELETE FROM amostras_sessao WHERE phone = $1`, [ph]);
 }
 
-module.exports = { saveAmostras, getAmostras, clearAmostras };
+module.exports = { saveAmostras, getAmostras, getAmostrasSessao, clearAmostras };
