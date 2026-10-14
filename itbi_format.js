@@ -88,6 +88,10 @@ function aggregateByDate(rawRows) {
       area_m2: aptoArea,
       valor: valorTotal,
       valor_m2: aptoArea > 0 ? valorTotal / aptoArea : 0,
+      // v3.9 (14/10) · componentes da transação — permitem comparar "sem vaga" com "sem vaga"
+      valor_apto: Number(apto.valor || 0),
+      vagas_qtd: vagas.length,
+      valor_vagas: vagasValor,
       is_ancora: [apto, ...vagas].some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1),
     };
   });
