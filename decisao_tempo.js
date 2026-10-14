@@ -207,7 +207,7 @@ function buildDecisaoTempo({
     custo_carreg_mensal: custoCarregMensal > 0 ? reaisEx(Math.round(custoCarregMensal)) : (custoCarregMensal < 0 ? "renda líquida " + reaisEx(Math.round(-custoCarregMensal)) : "—"),
     custo_carreg_label: (aluga && encargos_locatario)
       ? `aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês — inquilino paga condomínio e IPTU`
-      : `condomínio ${reaisEx(Math.round(condominio_mensal))}/mês + IPTU ${reaisEx(Math.round(iptu_anual/12))}/mês${aluga ? ` − aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês` : ""}`,
+      : `condomínio ${reaisEx(Math.round(condominio_mensal))}/mês${Number(iptu_anual) > 0 ? ` + IPTU ${reaisEx(Math.round(iptu_anual/12))}/mês` : " · IPTU não informado"}${aluga ? ` − aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês` : ""}`,
     regime_texto: regimeTxt,
     cenarios,
     chamada: `Vender por ${milhoes(P3)} em ~${meses_rapida} meses, ou segurar por um valor maior?` + alvoTxt,
