@@ -357,11 +357,22 @@ app.post("/estudo", async (req, res) => {
     const amostrasVazias = !body.amostras
       || (Array.isArray(body.amostras) && body.amostras.length === 0);
     if (amostrasVazias && body.phone && pool) {
-      const { getAmostras } = require("./amostras_store");
-      const persistidas = await getAmostras(pool, body.phone);
-      if (persistidas.length) {
+      const { getAmostrasSessao } = require("./amostras_store");
+      const { amostras: persistidas, idade_h } = await getAmostrasSessao(pool, body.phone);
+      // v2 (14/10) · só reaproveita amostras da sessão se forem RECENTES (≤ 6 h) e do MESMO imóvel:
+      // a área do avaliando salvo tem de bater (±15%) com a área útil do estudo pedido.
+      // Antes, qualquer amostra antiga do corretor entrava (Estudo 80: 43 m² comparado com 124 m²).
+      const numA = v => { const m = String(v ?? "").match(/\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
+      const au = Number(body.area_util) || 0;
+      const aval = persistidas.find(a => a && a.tipo === "avaliando");
+      const aAval = aval ? numA(aval.area) : 0;
+      const recente = idade_h != null && idade_h <= 6;
+      const mesmoImovel = !(au > 0 && aAval > 0) || Math.abs(aAval - au) <= au * 0.15;
+      if (persistidas.length && recente && mesmoImovel) {
         body.amostras = persistidas;
         console.log(`/estudo: recuperadas ${persistidas.length} amostras da sessão ${body.phone}`);
+      } else if (persistidas.length) {
+        console.log(`/estudo: amostras da sessão ${body.phone} IGNORADAS (idade ${idade_h != null ? idade_h.toFixed(1) : "?"} h, área avaliando salvo ${aAval || "?"} × pedida ${au || "?"})`);
       }
     }
     if (body.buildingKey) {
