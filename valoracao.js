@@ -42,6 +42,16 @@ function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
 }
 
 const roundTo = (v, step) => Math.round(v/step)*step;
+// v3.10 (16/10) · a conta do arredondamento escrita por extenso no slide 12 (pedido do Guilherme:
+// "qual a conta que é feita pra chegar em R$ 750.000?" — 772 mil arredondado ao múltiplo de 50 mil).
+// valores intermediários em reais exatos: "R$ 368.000" no lugar de 367.500 esconderia a conta
+const exato = v => "R$ " + String(Math.round(Number(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+const passoTxt = st => st >= 1e6 ? `R$ ${String(st/1e6).replace(".", ",")} milhão` : `R$ ${Math.round(st/1e3)} mil`;
+function contaArredondamento({ fech, faixaMin, valorMerc, passo, mobilia = 0, anuncio = 0, milhoes, mi }) {
+  return `Competitivo ${milhoes(faixaMin)} (venda em ~3 meses): ${exato(fech)} arredondado ao múltiplo de ${passoTxt(passo)} mais próximo. `
+    + `Potencial ${milhoes(valorMerc)}: ${milhoes(faixaMin)} + 5% = ${exato(faixaMin * 1.05)}, arredondado para cima ao múltiplo de R$ 25 mil`
+    + (mobilia > 0 ? ` · anúncio porteira fechada ${milhoes(anuncio)} (inclui mobília de ${mi(mobilia)}).` : " — é também o anúncio sugerido.");
+}
 const floorTo = (v, step) => Math.floor(v/step)*step;
 // <R$10mi: 2 casas (3 quando o valor pede — 1,425 mi não pode virar "1,43"); ≥R$10mi: 1 casa
 const decs    = v => { const m = Number(v)/1e6; if (m >= 10) return 1; const r = Math.round(m*1000); return (Math.abs(m*1000 - r) < 1e-6 && r % 10 !== 0) ? 3 : 2; }; // 3 casas só p/ valores exatos da grade de 25 mil (1,425)
@@ -174,7 +184,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
           travadoMenorM
             ? `O primeiro preço é o que vende: já existe similar anunciado por ${milhoes(menorM)} — fechamento limitado a ${milhoes(fechM)} (menor pedido − ${Math.round(desagioM*100)}%).`
             : `Nenhum similar anunciado abaixo da média — o fechamento segue a média com deságio.`,
-          `Fechamento esperado ${milhoes(fechM)} → competitivo ${milhoes(faixaMinM)} (venda em ~3 meses) · potencial ${milhoes(valorMercM)} (+5%)${mobM > 0 ? ` · anúncio porteira fechada ${milhoes(anuncioM)}` : ""}.`,
+          contaArredondamento({ fech: fechM, faixaMin: faixaMinM, valorMerc: valorMercM, passo: passoM, mobilia: mobM, anuncio: anuncioM, milhoes, mi }),
         ],
         _debug: { modo: "mercado", area_util: areaUtil, similares: simsM.length,
           media_pedidos: Math.round(mediaM), menor_pedido: Math.round(menorM), travado_menor: travadoMenorM,
@@ -351,6 +361,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     : 0;
 
   // 5) fechamento, valor de mercado e faixa
+  const anuncioPedido = anuncio;   // preço de anúncio antes do equilíbrio com as vendas (conta do slide 12)
   let fechamento = anuncio * (1 - desagio);
   const elevadoPorVendas = pisoFechamento > fechamento;
   if (elevadoPorVendas) {
@@ -429,10 +440,18 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
             ? `Reforma incorporada: +${mi(estadoAdj.valor)} (prêmio depreciado) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
             : `Estado típico do prédio: margem prudencial de 5% → lado das vendas: ${milhoes(pisoVendasEstado)}.`),
       mediaPedidosSimilares > 0
-        ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda.`
-        : `Sem anúncio de área similar para calibrar — o lado das vendas define sozinho.`,
-      `Fechamento esperado = média dos dois lados = ${milhoes(pisoFechamento)} → competitivo ${milhoes(faixaMin)} (venda em ~3 meses) · potencial ${milhoes(valorMerc)} (+5%)${mobiliaValor > 0 ? ` · anúncio porteira fechada ${milhoes(anuncio)} (inclui mobília de ${mi(mobiliaValor)})` : " · anúncio igual ao potencial"}.`,
-    ] : [],
+        ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda. Fechamento esperado = média dos dois lados = ${exato(pisoFechamento)}.`
+        : `Sem anúncio de área similar para calibrar — fechamento esperado = lado das vendas = ${exato(pisoFechamento)}.`,
+      contaArredondamento({ fech: fechamento, faixaMin, valorMerc, passo, mobilia: mobiliaValor, anuncio, milhoes, mi }),
+    ] : [
+      // v3.10 · sem equilíbrio com as vendas, a conta também aparece aberta (antes o slide mostrava texto genérico)
+      `Última venda real${modo === "equivalente" ? " de unidade da mesma planta" : " do prédio"}: ${milhoes(aV)} (${ancoraCurto}) × IPCA ${pct(fator)} = ${milhoes(tetoCorrecao)} em valor de hoje.`
+        + (limitadoPorConc ? ` Concorrente direto no mesmo prédio anunciado por ${milhoes(tetoConc)} limita o anúncio.` : ""),
+      (estadoAdj.frase ? `${estadoAdj.frase} ` : "")
+        + (travadoPorPedido ? `Limitado pelo menor anúncio de área similar (${milhoes(menorPedido)}). ` : "")
+        + `Preço de anúncio ${milhoes(anuncioPedido)} − deságio de ${Math.round(desagio*100)}% (pedido → fechamento) = fechamento esperado ${exato(fechamento)}.`,
+      contaArredondamento({ fech: fechamento, faixaMin, valorMerc, passo, mobilia: mobiliaValor, anuncio, milhoes, mi }),
+    ],
     _debug: {
       modo, area_total: areaTotal, area_util: areaUtil, equivalentes: equivalentes.length,
       anchor: aV, fator: +fator.toFixed(4), teto_correcao: Math.round(tetoCorrecao),
