@@ -190,9 +190,12 @@ function addDecisaoTempoSlides(p, data, opts={}){
     ]);
     const shortByKey = k => k==="alvo" ? (alvoDono?"atinge o preço do proprietário":"atinge o valor potencial")
       : k==="piso" ? "volta ao valor competitivo" : k.replace(/^enc/,"encalha −")+"%";
+    // 16/10/2026 (Guilherme): a matriz não mostra mais os cenários "encalha −5% / −10%".
+    // O cálculo continua existindo em decisao_tempo.js; só sai desta tabela.
     cenarios.forEach(c=>{
-      c.perdas.forEach(pd=>{
-        const pior = pd.key === c.perdas[c.perdas.length-1].key;
+      const linhas = c.perdas.filter(pd => !/^enc/.test(pd.key));
+      linhas.forEach(pd=>{
+        const pior = pd.key === linhas[linhas.length-1].key;
         const f = pior ? {color:REDTINT} : undefined;
         rows.push([
           cell(`Vender em ${c.meses}m — ${pd.short || shortByKey(pd.key)}`,{align:"left",fill:f}),
@@ -213,7 +216,7 @@ function addDecisaoTempoSlides(p, data, opts={}){
       {text:"Para compensar esperar em vez de vender pelo valor competitivo, o fechamento precisaria passar de  ",options:{color:INK}},
       {text:eqs,options:{color:NAVY,bold:true}},
       {text:".",options:{color:INK}},
-    ],{x:MX,y:4.16,w:8.9,h:0.26,fontFace:BODY,fontSize:10.5,align:"left",valign:"middle",margin:0});
+    ],{x:MX,y:Math.min(4.16, 1.32 + 0.25*(rows.length+1) + 0.3),w:8.9,h:0.26,fontFace:BODY,fontSize:10.5,align:"left",valign:"middle",margin:0});
 
     // AVISO DE ESTIMATIVAS + fatores fora de controle + competitividade
     const dbY=4.5, dbH=0.76;
