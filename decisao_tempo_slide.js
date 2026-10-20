@@ -1,3 +1,4 @@
+const { potencialDe, superotimistaDe } = require("./valoracao");
 /**
  * EVA · Slide(s) "Decisão no tempo" para o Estudo de Mercado (pptxgenjs).
  *
@@ -80,9 +81,9 @@ function addDecisaoTempoSlides(p, data, opts={}){
     const mRap = D.meses_rapida || 3;
     const hzs = D.horizontes || [12, 24];
     const T12 = hzs[0] || 12, T24 = hzs[1] || 24;
-    // régua dos cards: intermediário = competitivo +5%, superotimista = +15% (passo R$ 25 mil)
-    const vInter = D.valor_intermediario || Math.ceil(P3 * 1.05 / 25e3 - 1e-9) * 25e3;
-    const vOtim  = D.valor_superotimista || Math.round(P3 * 1.15 / 25e3) * 25e3;
+    // régua dos cards: intermediário = competitivo +5%, superotimista = +15% (passo pela magnitude — v3.11)
+    const vInter = D.valor_intermediario || potencialDe(P3);   // v3.11 · mesma régua da valoração
+    const vOtim  = D.valor_superotimista || superotimistaDe(P3); // v3.11
     const fmtCurto = v => { const a = Math.abs(Number(v)||0);
       return a >= 995e3 ? "R$ " + (a/1e6).toFixed(2).replace(/0$/,"").replace(".", ",") + " mi"
                         : "R$ " + Math.round(a/1e3) + " mil"; };
@@ -245,8 +246,8 @@ function addDecisaoTempoSlides(p, data, opts={}){
     const mRap = D.meses_rapida || 3;
     const hzs = D.horizontes || [12, 24];
     const T12 = hzs[0] || 12, T24 = hzs[1] || 24;
-    const vInter = D.valor_intermediario || Math.ceil(P3 * 1.05 / 25e3 - 1e-9) * 25e3;
-    const vOtim  = D.valor_superotimista || Math.round(P3 * 1.15 / 25e3) * 25e3;
+    const vInter = D.valor_intermediario || potencialDe(P3);   // v3.11 · mesma régua da valoração
+    const vOtim  = D.valor_superotimista || superotimistaDe(P3); // v3.11
     const milharL = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     const rEx = v => (v < 0 ? "−R$ " : "R$ ") + milharL(v) + ",00";
     const fat = T => Math.pow(1 + im, Math.max(0, T - mRap));
