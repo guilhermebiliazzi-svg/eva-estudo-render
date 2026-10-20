@@ -6,7 +6,7 @@
  *    unidades com área construída IDÊNTICA (match exato, tolerância numérica mínima)
  *    são comparáveis à unidade avaliada — unidades de tamanho diferente NÃO ancoram.
  *  - âncora = venda mais recente ENTRE AS UNIDADES IDÊNTICAS (modo "equivalente");
- *  - R$/m² das unidades idênticas calculado sobre a ÁREA ÚTIL informada (não a área ITBI);
+ *  - R$/m² das unidades idênticas calculado sobre a ÁREA TOTAL (IPTU/ITBI) — v3.11;
  *  - R$/m² global do condomínio calculado aí sim sobre a área construída do ITBI;
  *  - sem venda idêntica (modo "global"): NÃO produz valor fechado da unidade — o estudo
  *    apresenta o m² global do condomínio (base ITBI) com aviso explícito;
@@ -42,6 +42,13 @@ function ipcaFactor(anoDe, mesDe, anoRef, mesRef){
 }
 
 const roundTo = (v, step) => Math.round(v/step)*step;
+// v3.11 (19/10) · decisão Guilherme (caso Treze de Maio 1366): passo de R$ 50 mil abaixo de R$ 3 mi
+// movia o resultado até 10% (475 → 500 mil). Passo proporcional à magnitude do fechamento:
+const passoPara = v => (v < 1e6 ? 5e3 : v < 3e6 ? 10e3 : v < 8e6 ? 50e3 : 100e3);
+// potencial = competitivo + 5%, arredondado ao múltiplo MAIS PRÓXIMO do mesmo passo (substitui o
+// "para cima na grade de R$ 25 mil" de 25/08). Régua única: valoração, slide 12 e cards da decisão no tempo.
+const potencialDe = comp => roundTo(comp * 1.05, passoPara(comp));
+const superotimistaDe = comp => roundTo(comp * 1.15, passoPara(comp));
 // v3.10 (16/10) · a conta do arredondamento escrita por extenso no slide 12 (pedido do Guilherme:
 // "qual a conta que é feita pra chegar em R$ 750.000?" — 772 mil arredondado ao múltiplo de 50 mil).
 // valores intermediários em reais exatos: "R$ 368.000" no lugar de 367.500 esconderia a conta
@@ -49,7 +56,7 @@ const exato = v => "R$ " + String(Math.round(Number(v))).replace(/\B(?=(\d{3})+(
 const passoTxt = st => st >= 1e6 ? `R$ ${String(st/1e6).replace(".", ",")} milhão` : `R$ ${Math.round(st/1e3)} mil`;
 function contaArredondamento({ fech, faixaMin, valorMerc, passo, mobilia = 0, anuncio = 0, milhoes, mi }) {
   return `Competitivo ${milhoes(faixaMin)} (venda em ~3 meses): ${exato(fech)} arredondado ao múltiplo de ${passoTxt(passo)} mais próximo. `
-    + `Potencial ${milhoes(valorMerc)}: ${milhoes(faixaMin)} + 5% = ${exato(faixaMin * 1.05)}, arredondado para cima ao múltiplo de R$ 25 mil`
+    + `Potencial ${milhoes(valorMerc)}: ${milhoes(faixaMin)} + 5% = ${exato(faixaMin * 1.05)}, arredondado ao múltiplo de ${passoTxt(passoPara(faixaMin))} mais próximo`
     + (mobilia > 0 ? ` · anúncio porteira fechada ${milhoes(anuncio)} (inclui mobília de ${mi(mobilia)}).` : " — é também o anúncio sugerido.");
 }
 const floorTo = (v, step) => Math.floor(v/step)*step;
@@ -150,9 +157,9 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       const capMenorM = menorM * (1 - desagioM);
       const travadoMenorM = capMenorM < fechM - 1;   // primeiro preço é o que vende
       if (travadoMenorM) fechM = capMenorM;
-      const passoM   = fechM < 3e6 ? 50e3 : fechM < 8e6 ? 250e3 : 0.5e6;
+      const passoM   = passoPara(fechM);                    // v3.11
       const faixaMinM = roundTo(fechM, passoM);
-      const valorMercM = Math.ceil(faixaMinM * 1.05 / 25e3 - 1e-9) * 25e3;
+      const valorMercM = potencialDe(faixaMinM);             // v3.11
       const mobM = Math.max(0, Math.round(Number(opts.mobilia_valor) || 0));
       const anuncioM = valorMercM + mobM;
       return {
@@ -214,9 +221,11 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const m2GlobalN = somaArea > 0 ? somaValor/somaArea : null;
 
   // ===== v2 · m² DAS UNIDADES IDÊNTICAS =====
-  // sobre a ÁREA ÚTIL informada (planta idêntica ⇒ mesma área útil da avaliada) — NÃO sobre a área ITBI
-  const m2EqUtilN = (modo === "equivalente" && areaUtil)
-    ? equivalentes.reduce((s,v)=> s + Number(v.valor||0), 0) / (equivalentes.length * areaUtil)
+  // v3.11 · sobre a ÁREA TOTAL (IPTU/ITBI) — mesma base das vendas. Dividir pela área útil misturava
+  // bases (Treze de Maio 1366: R$ 9.232/m² "útil" × 45 m² = 415 mil, mas o estudo recomendava 500 mil).
+  // O nome do campo foi mantido por compatibilidade com o gerador.
+  const m2EqUtilN = (modo === "equivalente")
+    ? equivalentes.reduce((s,v)=> s + Number(v.valor||0), 0) / (equivalentes.length * areaTotal)
     : null;
   // referência das idênticas na base ITBI (área total), para leitura lado a lado com o global
   const m2EqItbiN = (modo === "equivalente")
@@ -231,8 +240,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
     m2_global: m2GlobalN != null ? m2fmt(m2GlobalN) : "",
     m2_global_label: "condomínio · área construída ITBI",
     m2_equivalente_util: m2EqUtilN != null ? m2fmt(m2EqUtilN) : "",
-    m2_equivalente_util_label: (modo === "equivalente" && areaUtil)
-      ? `unidades idênticas (${areaFmt(areaTotal)} m² IPTU) · sobre a área útil de ${areaFmt(areaUtil)} m²`
+    m2_equivalente_util_label: (modo === "equivalente")
+      ? `unidades idênticas · sobre a área total de ${areaFmt(areaTotal)} m² (IPTU)`
       : "",
     m2_equivalente_itbi: m2EqItbiN != null ? m2fmt(m2EqItbiN) : "",
   };
@@ -271,7 +280,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const aD = parseDataBR(anchor.data);
 
   // passo de arredondamento adaptativo à magnitude — R$1mi não pode arredondar em R$0,5mi
-  const passo = opts.passo ?? (aV < 3e6 ? 50e3 : aV < 8e6 ? 250e3 : 0.5e6);
+  let passo = opts.passo ?? passoPara(aV);   // v3.11 · recalculado sobre o fechamento mais abaixo
 
   // 2) teto por correção monetária (IPCA)
   const fator = ipcaFactor(aD.ano, aD.mes, anoRef, mesRef);
@@ -322,13 +331,17 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // recentes (≤12 meses), cada uma corrigida pelo IPCA até hoje, ajustada UMA vez pelo
   // estado do avaliado (desconto de estado se declarado; margem de 5% se estado desconhecido).
   const mesesDesde = v => { const d = parseDataBR(v.data); return (anoRef - d.ano) * 12 + (mesRef - d.mes); };
+  // v3.11 (19/10) · decisão Guilherme: MEDIANA de TODAS as vendas idênticas dos últimos 24 meses,
+  // cada uma corrigida pelo IPCA. Antes: média das 2 últimas ≤12m — uma venda isolada virava a base
+  // (Treze de Maio 1366: só o APTO 62, R$ 513 mil corrigido, ignorando 333/395/434 mil).
+  const JANELA_VENDAS_MESES = 24;
   const vendasRecentes = (modo === "equivalente")
-    ? [...equivalentes].filter(v => mesesDesde(v) <= 12).sort((a,b) => dKey(b) - dKey(a)).slice(0, 2)
+    ? [...equivalentes].filter(v => mesesDesde(v) <= JANELA_VENDAS_MESES).sort((a,b) => dKey(b) - dKey(a))
     : [];
   const vendaCorrigida = v => { const d = parseDataBR(v.data); return Number(v.valor) * ipcaFactor(d.ano, d.mes, anoRef, mesRef); };
-  const mediaVendasCorr = vendasRecentes.length
-    ? vendasRecentes.reduce((s,v) => s + vendaCorrigida(v), 0) / vendasRecentes.length
-    : 0;
+  const mediana = arr => { const s = [...arr].sort((a,b) => a - b); const n = s.length;
+    return n ? (n % 2 ? s[(n-1)/2] : (s[n/2-1] + s[n/2]) / 2) : 0; };
+  const mediaVendasCorr = vendasRecentes.length ? mediana(vendasRecentes.map(vendaCorrigida)) : 0; // (mediana)
   // Ajuste sobre a média das vendas (uma única vez):
   //  - estado original (ajuste < 0): desconto da obra — o comprador precifica a atualização;
   //  - reforma recente (ajuste > 0): prêmio depreciado SOMA SEMPRE — v3.6, decisão Guilherme
@@ -356,8 +369,11 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   const mediaPedidosSimilares = pedidosAtivos.length
     ? pedidosAtivos.reduce((s,v) => s + v, 0) / pedidosAtivos.length
     : 0;
+  // v3.11 · anúncio é PEDIDO: entra no equilíbrio já com o deságio pedido → fechamento
+  // (antes entrava cheio e pesava o mesmo que o ITBI inteiro).
+  const pedidosFechamento = mediaPedidosSimilares * (1 - desagio);
   const pisoFechamento = pisoVendasEstado > 0
-    ? (mediaPedidosSimilares > 0 ? (pisoVendasEstado + mediaPedidosSimilares) / 2 : pisoVendasEstado)
+    ? (mediaPedidosSimilares > 0 ? (pisoVendasEstado + pedidosFechamento) / 2 : pisoVendasEstado)
     : 0;
 
   // 5) fechamento, valor de mercado e faixa
@@ -373,12 +389,13 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   // v3.4.1 · competitivo arredonda para o passo MAIS PRÓXIMO (não mais para baixo):
   // fechamento de 1.349.991 não pode virar 1,30 enquanto 1.350.824 vira 1,35 —
   // R$ 833 de diferença de média de amostras não pode valer um degrau de R$ 50 mil.
+  if (opts.passo == null) passo = passoPara(fechamento);   // v3.11 · passo pela magnitude do fechamento
   const faixaMin    = roundTo(fechamento, passo);
   // v3.5 · potencial (~12 meses) = anúncio sugerido = competitivo + 5% arredondado em R$ 25 mil —
   // exatamente o "valor intermediário" dos cards da decisão no tempo (uma régua só no deck inteiro).
   // Substitui a trava v3.3 (anúncio ≤ competitivo×1,05) e o potencial por média, que divergiam dos cards.
   // arredonda PARA CIMA na grade de 25 mil (decisão Guilherme 25/08: 700 → 750; 1,35 → 1,425; 600 → 650)
-  const valorMerc   = Math.ceil(faixaMin * 1.05 / 25e3 - 1e-9) * 25e3;
+  const valorMerc   = potencialDe(faixaMin);   // v3.11 · mais próximo, mesmo passo
   anuncio           = valorMerc;
   // v3.6 · PORTEIRA FECHADA: mobília inclusa soma SÓ ao anúncio sugerido — competitivo e
   // potencial seguem sendo o imóvel (móvel não entra em avaliação nem em financiamento).
@@ -427,12 +444,14 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       + (estadoAdj.frase ? ` ${estadoAdj.frase}` : "")
       + (mobiliaValor > 0 ? ` Venda porteira fechada: mobília inclusa estimada em ${mi(mobiliaValor)} — somada apenas ao anúncio sugerido (${milhoes(anuncio)}); o valor do imóvel em si segue o competitivo/potencial.` : "")
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
-      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas vendas") : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? ", mais o prêmio da reforma" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
+      + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "única venda dos últimos 24 meses" : `mediana de ${vendasRecentes.length} vendas dos últimos 24 meses`) : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? ", mais o prêmio da reforma" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)}, menos ${Math.round(desagio*100)}% de negociação = ${milhoes(pedidosFechamento)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
     estado_frase: estadoAdj.frase,
     // v3.5.1 · a conta aberta do slide "Pedido × Fechado" — cada passo com número (evita "de onde veio o 725?")
     passos_ajuste: elevadoPorVendas ? [
       usaRecentes
-        ? `Vendas reais de unidades idênticas nos últimos 12 meses: ${vendasRecentes.length === 1 ? "última venda" : "média das 2 últimas"} corrigida pelo IPCA = ${milhoes(mediaVendasCorr)}.`
+        ? (vendasRecentes.length === 1
+            ? `Venda real de unidade idêntica nos últimos 24 meses: ${milhoes(Number(vendasRecentes[0].valor))} corrigida pelo IPCA = ${milhoes(mediaVendasCorr)}.`
+            : `Vendas reais de unidades idênticas nos últimos 24 meses, corrigidas pelo IPCA: ${[...vendasRecentes].map(vendaCorrigida).sort((a,b)=>a-b).map(v => mi(v)).join(" · ")} → mediana = ${milhoes(mediaVendasCorr)}.`)
         : `Última venda real de unidade idêntica: ${milhoes(aV)} (${ancoraCurto}) × IPCA ${pct(fator)} = ${milhoes(tetoCorrecao)} em valor de hoje.`,
       estadoAdj.valor < 0
         ? `Estado original: desconto de ${mi(Math.abs(estadoAdj.valor))} (o comprador precifica a obra) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
@@ -440,7 +459,7 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
             ? `Reforma incorporada: +${mi(estadoAdj.valor)} (prêmio depreciado) → lado das vendas: ${milhoes(pisoVendasEstado)}.`
             : `Estado típico do prédio: margem prudencial de 5% → lado das vendas: ${milhoes(pisoVendasEstado)}.`),
       mediaPedidosSimilares > 0
-        ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda. Fechamento esperado = média dos dois lados = ${exato(pisoFechamento)}.`
+        ? `Concorrência ativa de área similar (±10%): média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)} — pedido, não venda — menos ${Math.round(desagio*100)}% de negociação = ${milhoes(pedidosFechamento)}. Fechamento esperado = média dos dois lados = ${exato(pisoFechamento)}.`
         : `Sem anúncio de área similar para calibrar — fechamento esperado = lado das vendas = ${exato(pisoFechamento)}.`,
       contaArredondamento({ fech: fechamento, faixaMin, valorMerc, passo, mobilia: mobiliaValor, anuncio, milhoes, mi }),
     ] : [
@@ -465,6 +484,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       usa_recentes: usaRecentes, base_vendas: Math.round(baseVendas),
       piso_vendas_estado: Math.round(pisoVendasEstado),
       media_pedidos_similares: Math.round(mediaPedidosSimilares),
+      pedidos_com_desagio: Math.round(pedidosFechamento),
+      vendas_janela_24m: vendasRecentes.length,
       piso_fechamento_vendas: Math.round(pisoFechamento),
       elevado_por_vendas: elevadoPorVendas,
       anuncio, fechamento: Math.round(fechamento),
@@ -475,4 +496,4 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
   };
 }
 
-module.exports = { buildValoracao, ipcaFactor, areaIdentica, tolArea };
+module.exports = { buildValoracao, ipcaFactor, areaIdentica, tolArea, passoPara, potencialDe, superotimistaDe };
