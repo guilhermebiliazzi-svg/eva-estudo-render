@@ -392,10 +392,10 @@ function buildEstudo(data, opts={}){
     s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
     const temPainelM2 = Boolean(val.m2_equivalente_util || val.m2_global);
     if (temPainelM2 && !modoGlobal && val.m2_equivalente_util) {
-      // modo equivalente: m² das idênticas (área útil) + m² global (área ITBI)
+      // modo equivalente: m² das idênticas (área total, v3.11) + m² global (área ITBI)
       s.addText("R$/M² — UNIDADES IDÊNTICAS",{x:cx+0.25,y:1.9,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
       s.addText([{text:val.m2_equivalente_util,options:{fontSize:21,bold:true,color:WHITE,breakLine:true}},
-        {text:`sobre a área útil de ${val.area_util_ref?areaFmt(val.area_util_ref):"—"} m² · ${val.equivalentes_qtd} venda${val.equivalentes_qtd>1?"s":""} de ${areaFmt(areaTotalRef)} m² (IPTU)`,options:{fontSize:9.5,color:ICE}}],
+        {text:`sobre a área total de ${areaFmt(areaTotalRef)} m² (IPTU) · ${val.equivalentes_qtd} venda${val.equivalentes_qtd>1?"s":""} da mesma planta`,options:{fontSize:9.5,color:ICE}}],
         {x:cx+0.25,y:2.18,w:cw-0.5,h:0.85,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.08});
       s.addShape(p.shapes.LINE,{x:cx+0.25,y:3.12,w:cw-0.5,h:0,line:{color:"24395C",width:1}});
       s.addText("R$/M² GLOBAL DO CONDOMÍNIO",{x:cx+0.25,y:3.2,w:cw-0.5,h:0.28,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
@@ -598,7 +598,7 @@ function buildEstudo(data, opts={}){
       s.addText("Valor competitivo de mercado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
       s.addText((dtc ? dtc.p3 : (val.valor_mercado||"")),{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
       const subLinha = "recomendado para vender em até 3 meses"
-        + (val.m2_equivalente_util ? `   ·   ${val.m2_equivalente_util} útil — unidades idênticas` : "");
+        + (val.m2_equivalente_util ? `   ·   ${val.m2_equivalente_util} área total — unidades idênticas` : "");
       s.addText(subLinha,{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
       s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
       s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
