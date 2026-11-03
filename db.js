@@ -26,7 +26,9 @@ WITH base AS (
     NULLIF(btrim(complemento), '')  AS unidade,
     area_construida::numeric        AS area_m2,
     valor_transacao::numeric        AS valor,
-    valor_m2::numeric               AS valor_m2
+    valor_m2::numeric               AS valor_m2,
+    -- v3.12 · vaga pelo USO do IPTU (fração de garagem coletiva: "G 16 A 22 T", "GARAGES 1/15"...)
+    COALESCE(descricao_uso ILIKE 'GARAGEM%', false) AS uso_garagem
   FROM vendidos_itbi_usados
   WHERE regexp_replace(split_part(numero::text, '.', 1), '\\D', '', 'g') = $1
     AND regexp_replace(split_part(cep::text,    '.', 1), '\\D', '', 'g') = $2
@@ -37,10 +39,11 @@ flagged AS (
   SELECT *,
     -- "é apartamento" (não vaga/box avulsa): usado só p/ ESCOLHER a âncora; nada é excluído
     ( area_m2 >= 30
+      AND NOT uso_garagem
       AND (unidade IS NULL OR unidade !~* '^(VG|VAGA|BOX)([^A-Za-z]|$)') ) AS is_apto
   FROM base
 )
-SELECT data, unidade, area_m2, valor, valor_m2,
+SELECT data, unidade, area_m2, valor, valor_m2, uso_garagem AS is_vaga,
        ( ROW_NUMBER() OVER (ORDER BY is_apto DESC, data DESC, valor DESC) = 1 ) AS is_ancora
 FROM flagged
 ORDER BY data ASC;`;
@@ -71,7 +74,7 @@ function excluirVendidos(rows, excluir) {
   const kept = rows.filter(r => !set.has(norm(chaveVendido(r))));
   // se a âncora do SQL foi excluída, promove a venda "apto" mais recente restante
   if (kept.length && !kept.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1)) {
-    const ehVaga = r => /^(VG|VAGA|BOX)\b/i.test(String(r.unidade || "").trim()) || Number(r.area_m2) < 30;
+    const ehVaga = r => r.is_vaga === true || /^(VG|VAGA|BOX)\b/i.test(String(r.unidade || "").trim()) || Number(r.area_m2) < 30;
     const pool = kept.filter(r => !ehVaga(r));
     const alvo = (pool.length ? pool : kept).reduce((m, r) =>
       (!m || new Date(r.data) > new Date(m.data)) ? r : m, null);
@@ -93,7 +96,7 @@ function manterVendidos(rows, manter) {
   const set = new Set(manter.map(norm).filter(Boolean));
   // v3.8 · mesmo critério de vaga do itbi_format (prefixo ampliado + área <15 m²), e a vaga
   // acompanha a venda mantida se foi lançada em até 5 dias de distância (guia paga depois).
-  const ehVaga = r => /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(r.unidade || "").trim()) ||
+  const ehVaga = r => r.is_vaga === true || /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(r.unidade || "").trim()) ||
     (Number(r.area_m2) > 0 && Number(r.area_m2) < 15);
   const diaDe = r => { const [dd, mm, yy] = norm(chaveVendido(r)).split("|")[0].split("/");
     return Math.floor(Date.UTC(+yy, +mm - 1, +dd) / 86400000); };
@@ -126,6 +129,7 @@ async function fetchVendidos(pool, buildingKey, opts = {}) {
   const mapped = rows.map(r => ({
     data: r.data, unidade: r.unidade, area_m2: r.area_m2,
     valor: r.valor, valor_m2: r.valor_m2, is_ancora: r.is_ancora,
+    is_vaga: r.is_vaga === true || r.is_vaga === "t",
   }));
   return excluirVendidos(mapped, opts.excluir);
 }
