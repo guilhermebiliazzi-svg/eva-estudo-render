@@ -46,7 +46,10 @@ function vendidosFromRows(rows) {
 // detecta vaga avulsa: prefixo da unidade OU área minúscula (<15 m² — vaga típica tem 9–13;
 // o corte baixo evita engolir kitnet de 20-28 m²). v3.8: cobre "GAR"/"GARAGEM"/"ESTACIONAMENTO",
 // que antes passavam como "apto" e quebravam o cruzamento apto+vaga (caso APTO 141, 10/09).
-const isVaga = (u, area) =>
+// v3.12 · 3º parâmetro: flag do USO do IPTU (GARAGEM) vinda do SQL — pega a vaga vendida como
+// fração da garagem coletiva, cujo complemento não diz "vaga" ("G 16 A 22 T").
+const isVaga = (u, area, usoGaragem) =>
+  usoGaragem === true ||
   /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(u || "").trim()) ||
   (Number(area) > 0 && Number(area) < 15);
 
@@ -64,8 +67,8 @@ function aggregateByDate(rawRows) {
   const grupos = [];      // { apto, vagas: [], dia }
   const orfas  = [];      // vagas de dia sem apto
   for (const [, rows] of byKey) {
-    const aptos = rows.filter(r => !isVaga(r.unidade, r.area_m2));
-    const vagas = rows.filter(r =>  isVaga(r.unidade, r.area_m2));
+    const aptos = rows.filter(r => !isVaga(r.unidade, r.area_m2, r.is_vaga));
+    const vagas = rows.filter(r =>  isVaga(r.unidade, r.area_m2, r.is_vaga));
     if (aptos.length === 0) { orfas.push(...vagas); continue; }
     aptos.forEach((apto, i) => grupos.push({ apto, vagas: i === 0 ? vagas.slice() : [], dia: dayOf(apto.data) }));
   }
