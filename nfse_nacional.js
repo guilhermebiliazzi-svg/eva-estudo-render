@@ -30,7 +30,7 @@
  *                           Sem ele vai pTotTrib zerado (Lei 12.741).
  *   NFSE_NAC_ENVIAR_IM    — "false" para não mandar a IM (padrão: manda).
  *   NFSE_NAC_REGAPTRIBSN  — regime de apuração do SN (padrão 1).
- *   NFSE_NAC_CTRIBMUN     — códigos municipais por serviço, "171201=001;100501=002".
+ *   NFSE_NAC_CTRIBMUN     — códigos municipais por serviço (padrão "171201=008;100501=001").
  *   NFSE_NAC_SEFIN_URL / NFSE_NAC_ADN_URL — override das URLs de produção.
  */
 
@@ -134,8 +134,12 @@ function agoraSP(margemSegundos = 60) {
   return { dhEmi: `${iso}-03:00`, data: iso.slice(0, 10) };
 }
 
+// Códigos municipais de São Paulo, lidos das notas da Ville que a Prefeitura
+// compartilhou com o ADN (17.12.01 → 008; 10.05.01 → 001).
+const CTRIBMUN_SP = { "171201": "008", "100501": "001" };
+
 function cTribMunDe(cTribNac) {
-  const mapa = process.env.NFSE_NAC_CTRIBMUN || "";
+  const mapa = process.env.NFSE_NAC_CTRIBMUN || Object.entries(CTRIBMUN_SP).map(([k, v]) => `${k}=${v}`).join(";");
   for (const par of mapa.split(";")) {
     const [k, v] = par.split("=").map((x) => (x || "").trim());
     if (k === cTribNac && /^\d{3}$/.test(v || "") && v !== "000") return v;
