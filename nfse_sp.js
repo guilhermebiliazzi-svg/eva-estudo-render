@@ -670,6 +670,7 @@ function statusCertificado() {
 
 module.exports = {
   SOAP_ACTIONS,
+  lerCertificado,
   consultarPorRPS,
   emitirNFSe,
   statusCertificado,
