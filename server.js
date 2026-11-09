@@ -32,6 +32,7 @@ const { auditarCertidao } = require("./auditor_cnd");
 const { renderParecerHTML } = require("./parecer_render");
 const { gerarCCV } = require("./ccv");
 const { emitirNFSe, statusCertificado, listarSoapActions, consultarPorRPS } = require("./nfse_sp");
+const nfseNac = require("./nfse_nacional");
 
 const PORT = process.env.PORT || 3000;
 const ASSETS = process.env.ASSETS_DIR || path.join(__dirname, "assets");
@@ -159,6 +160,116 @@ app.post("/nfse-sp/emitir", async (req, res) => {
   } catch (e) {
     console.error("erro /nfse-sp/emitir:", e);
     res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// ===================================================================
+// NFS-e — Sistema Nacional (Emissor Nacional), obrigatório desde 01/11/2026
+// para ME/EPP do Simples em São Paulo. Mesmo token das rotas /nfse-sp.
+// ===================================================================
+
+const homolog = (v) => v === true || v === "true" || v === "1";
+
+// Emissão de uma NFS-e. Mesmo corpo de /nfse-sp/emitir; o número vira o nDPS.
+// teste: true → produção restrita (valida tudo, sem efeito fiscal).
+app.post("/nfse-nacional/emitir", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const b = req.body || {};
+    const faltando = ["serie", "numero", "valorServicos", "discriminacao", "tomadorDoc", "tomadorNome"]
+      .filter((k) => b[k] === undefined || b[k] === null || b[k] === "");
+    if (faltando.length) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes: " + faltando.join(", ") });
+    }
+    const saida = await nfseNac.emitirNacional(
+      {
+        serie: b.serie,
+        numero: b.numero,
+        dataCompetencia: b.dataCompetencia || b.dataEmissao,
+        valorServicos: Number(b.valorServicos),
+        tomadorDoc: b.tomadorDoc,
+        tomadorNome: b.tomadorNome,
+        tomadorEmail: b.tomadorEmail,
+        tomadorEndereco: b.tomadorEndereco,
+        discriminacao: b.discriminacao,
+        codigoServico: b.codigoServico,
+        cTribNac: b.cTribNac,
+        cTribMun: b.cTribMun,
+        issRetido: b.issRetido,
+        aliquota: b.aliquota,
+      },
+      { homologacao: homolog(b.teste) }
+    );
+    if (!b.debug) {
+      delete saida.xmlEnvio;
+      delete saida.xmlRetorno;
+    }
+    res.json(saida);
+  } catch (e) {
+    console.error("erro /nfse-nacional/emitir:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Conciliação: { chaves: [{ serie, numero }] } → quais DPS viraram NFS-e.
+app.post("/nfse-nacional/consultar-dps", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const b = req.body || {};
+    res.json(await nfseNac.consultarPorDps(b.chaves || [], { homologacao: homolog(b.teste) }));
+  } catch (e) {
+    console.error("erro /nfse-nacional/consultar-dps:", e);
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// PDF oficial (DANFSe). O painel repassa ao navegador.
+app.get("/nfse-nacional/danfse/:chave", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const pdf = await nfseNac.baixarDanfse(req.params.chave, { homologacao: homolog(req.query.teste) });
+    res.set("Content-Type", "application/pdf");
+    res.set("Content-Disposition", `inline; filename="NFSe-${String(req.params.chave).slice(-12)}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    res.status(502).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Consulta uma NFS-e pela chave (resumo + XML com ?xml=1).
+app.get("/nfse-nacional/nfse/:chave", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const r = await nfseNac.consultarNfse(req.params.chave, { homologacao: homolog(req.query.teste) });
+    if (!req.query.xml) delete r.xml;
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Diagnóstico: documentos do CNPJ no ADN a partir de um NSU (notas feitas no
+// Emissor web aparecem aqui). ?nsu=0&xml=1
+app.get("/nfse-nacional/dfe", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    const r = await nfseNac.distribuicaoDfe(req.query.nsu || 0, { homologacao: homolog(req.query.teste) });
+    if (!req.query.xml && Array.isArray(r.documentos)) {
+      r.documentos = r.documentos.map((d) => ({ ...d, resumo: d.xml ? nfseNac.resumoNFSe(d.xml) : null, xml: undefined }));
+    }
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+// Diagnóstico: parâmetros municipais. ?caminho=3550308/convenio
+app.get("/nfse-nacional/parametros", async (req, res) => {
+  if (!exigirTokenNFSe(req, res)) return;
+  try {
+    res.json(await nfseNac.parametrosMunicipais(req.query.caminho, { homologacao: homolog(req.query.teste) }));
+  } catch (e) {
+    res.status(400).json({ error: String((e && e.message) || e) });
   }
 });
 
