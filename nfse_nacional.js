@@ -38,6 +38,7 @@ const https = require("https");
 const zlib = require("zlib");
 const { SignedXml } = require("xml-crypto");
 const { lerCertificado } = require("./nfse_sp");
+const { gerarDanfse } = require("./danfse_local");
 
 const NS = "http://www.sped.fazenda.gov.br/nfse";
 const VERSAO = "1.01";
@@ -576,18 +577,32 @@ async function consultarPorDps(chaves, { homologacao = false } = {}) {
   return { sucesso: erros.length === 0, notas, erros };
 }
 
-/** PDF oficial (DANFSe) da nota, gerado pelo ADN. */
+/**
+ * PDF da nota (DANFSe). Tenta o oficial do ADN uma vez; ele responde 503 em
+ * produção desde ago/2026, e aí o PDF é montado aqui a partir do XML
+ * autorizado (danfse_local.js), com a marca CANCELADA se houver o evento.
+ */
 async function baixarDanfse(chave, { homologacao = false } = {}) {
   const A = amb(homologacao);
-  let ultimo = null;
-  for (let i = 0; i < 3; i++) {
-    const r = await requisicao("GET", `${A.adn}/danfse/${soDigitos(chave)}`, { aceitar: "application/pdf" });
+  const ch = soDigitos(chave);
+  try {
+    const r = await requisicao("GET", `${A.adn}/danfse/${ch}`, { aceitar: "application/pdf", timeoutMs: 10000 });
     if (r.status === 200 && r.corpo.slice(0, 4).toString() === "%PDF") return r.corpo;
-    ultimo = r;
-    if (![502, 503, 504].includes(r.status)) break;
-    await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+  } catch {
+    /* segue para o PDF local */
   }
-  throw new Error(`DANFSe indisponível (HTTP ${ultimo && ultimo.status}).`);
+  const nf = await consultarNfse(ch, { homologacao });
+  if (!nf.ok) {
+    throw new Error(`NFS-e não encontrada na Sefin (${(nf.erros && nf.erros[0] && nf.erros[0].descricao) || "HTTP " + nf.httpStatus}).`);
+  }
+  let cancelada = false;
+  try {
+    const ev = await requisicao("GET", `${A.sefin}/nfse/${ch}/eventos/101101`, { timeoutMs: 10000 });
+    cancelada = ev.status === 200;
+  } catch {
+    /* sem a consulta de eventos, sai sem a marca */
+  }
+  return gerarDanfse(nf.xml, { cancelada });
 }
 
 /**
