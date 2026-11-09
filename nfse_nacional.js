@@ -200,7 +200,8 @@ function montarDps(d, o = {}) {
   const A = amb(o.homologacao);
   const cnpj = soDigitos(process.env.NFSE_SP_CNPJ || "41132782000108");
   const im = soDigitos(process.env.NFSE_SP_IM || "69033951");
-  const enviarIm = String(process.env.NFSE_NAC_ENVIAR_IM || "true") !== "false";
+  const enviarIm =
+    o.enviarIm !== undefined ? !!o.enviarIm : String(process.env.NFSE_NAC_ENVIAR_IM || "true") !== "false";
   const regApTribSN = String(process.env.NFSE_NAC_REGAPTRIBSN || "1");
 
   const serie = soDigitos(d.serie);
@@ -461,11 +462,25 @@ function resumoNFSe(xml) {
 async function emitirNacional(dados, opcoes = {}) {
   const homologacao = !!opcoes.homologacao;
   const A = amb(homologacao);
-  const dps = montarDps(dados, { homologacao });
-  const assinado = assinarElemento(dps.xml, "infDPS");
 
-  const r = await requisicao("POST", `${A.sefin}/nfse`, { corpo: { dpsXmlGZipB64: gzipB64(assinado) } });
-  const json = lerJson(r.corpo);
+  // A IM só pode ir se houver cadastro complementar no CNC do município
+  // (E0120 quando não há; obrigatória quando há). Começa pelo padrão e, se a
+  // Sefin recusar só por isso, reenvia a mesma DPS com o ajuste — a DPS
+  // rejeitada não ocupa o número.
+  let dps, assinado, r, json;
+  let enviarIm;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    dps = montarDps(dados, { homologacao, enviarIm });
+    assinado = assinarElemento(dps.xml, "infDPS");
+    r = await requisicao("POST", `${A.sefin}/nfse`, { corpo: { dpsXmlGZipB64: gzipB64(assinado) } });
+    json = lerJson(r.corpo);
+    if (r.status < 400) break;
+    const codigos = errosDe(json, r.status, r.corpo).map((e) => String(e.codigo || ""));
+    const temIm = /<prest><CNPJ>\d+<\/CNPJ><IM>/.test(dps.xml);
+    if (codigos.length === 1 && codigos[0] === "E0120" && temIm) enviarIm = false;
+    else if (codigos.length === 1 && codigos[0] === "E0116" && !temIm) enviarIm = true;
+    else break;
+  }
   const base = {
     teste: homologacao,
     ambiente: homologacao ? "producao_restrita" : "producao",
