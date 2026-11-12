@@ -16,11 +16,14 @@ const { potencialDe, superotimistaDe } = require("./valoracao");
  * Retorna quantos slides foram adicionados (0 ou 3), p/ o gerador renumerar o resto.
  */
 
-const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
-      INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
-      REDTINT="FCEFF1", ICETINT="EAF1FB",
-      GREEN="157347", GREENTINT="E6F4EC", ROSE="E8677E";
-const HEAD="Georgia", BODY="Calibri";
+// v4 · identidade REMAX 2026 — cores/fonte em brand.js. "Ganho/melhor escolha" usa o
+// Azul Primário REMAX (o guia não tem verde); perda segue no Vermelho Primário.
+const { C:B, FONT, marca, barra } = require("./brand");
+const NAVY=B.NAVY, RED=B.RED, ICE=B.SKY, WHITE=B.WHITE,
+      INK=B.INK, MUTED=B.MUTED, LINE=B.LINE, PAPER=B.CREAM,
+      REDTINT=B.REDTINT, ICETINT=B.SKYTINT,
+      GREEN=B.BLUE, GREENTINT=B.SKYTINT, ROSE="FF6A5C";
+const HEAD=FONT, BODY=FONT;
 const MX=0.55;
 
 function addDecisaoTempoSlides(p, data, opts={}){
@@ -28,13 +31,13 @@ function addDecisaoTempoSlides(p, data, opts={}){
   if (!dt || dt.aplicavel === false) return 0;
   const num = opts.num || 12;                 // número da seção no eyebrow
   const footerStart = opts.footerStart || 13; // nº da página do 1º slide da seção
-  const unidade = (data.corretor && data.corretor.unidade) || "RE/MAX Ville";
+  const unidade = marca((data.corretor && data.corretor.unidade) || "REMAX Ville");
 
   // ---- helpers de identidade (iguais ao estudo_generator) ----
   const SH=()=>({type:"outer",color:"000000",blur:9,offset:3,angle:135,opacity:0.13});
   function eyebrow(s,txt,y=0.42){
-    s.addShape(p.shapes.RECTANGLE,{x:MX,y:y+0.02,w:0.13,h:0.13,fill:{color:RED},line:{type:"none"}});
-    s.addText(String(txt).toUpperCase(),{x:MX+0.22,y:y-0.05,w:8,h:0.28,fontFace:BODY,fontSize:11,
+    barra(p,s,{x:MX,y:y-0.03,h:0.22,w:0.075,color:RED});
+    s.addText(String(txt).toUpperCase(),{x:MX+0.27,y:y-0.05,w:8,h:0.28,fontFace:BODY,fontSize:11,
       color:RED,bold:true,charSpacing:3,align:"left",valign:"middle",margin:0});
   }
   function title(s,txt,y=0.72,size=28){
@@ -73,7 +76,7 @@ function addDecisaoTempoSlides(p, data, opts={}){
       {text:" — e, dependendo de onde ele está, é o ", options:{color:NAVY}},
       {text:"seu", options:{color:RED, italic:true}},
       {text:" dinheiro indo embora.", options:{color:NAVY}},
-    ],{x:MX,y:0.70,w:8.9,h:0.62,fontFace:HEAD,fontSize:22,bold:true,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.0});
+    ],{x:MX,y:0.68,w:8.9,h:0.6,fontFace:HEAD,fontSize:20,bold:true,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.0});
 
     const D = dt._debug || {};
     const im = D.im || 0.011;
@@ -264,10 +267,10 @@ function addDecisaoTempoSlides(p, data, opts={}){
             : (dt.regime === "reside" ? "condomínio e IPTU não entram — o proprietário usa o imóvel no período"
             : dt.regime === "alugado" ? "condomínio e IPTU cobertos pelo aluguel no período"
             : "condomínio e IPTU não informados — informe os valores para incluí-los no cálculo")), options:{color:INK}},
-    ],{x:MX,y:1.26,w:8.9,h:0.34,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.05});
+    ],{x:MX,y:1.24,w:8.9,h:0.36,fontFace:BODY,fontSize:9.5,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.05});
 
-    const hdr = t => ({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:10.5,align:(t?"right":"left"),valign:"middle"}});
-    const cel = (t,o={}) => ({text:String(t),options:{fontSize:10.5,align:o.align||"right",valign:"middle",fill:o.fill,bold:o.bold,color:o.color||INK}});
+    const hdr = t => ({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9.5,align:(t?"right":"left"),valign:"middle"}});
+    const cel = (t,o={}) => ({text:String(t),options:{fontSize:9.5,align:o.align||"right",valign:"middle",fill:o.fill,bold:o.bold,color:o.color||INK}});
 
     // ---- Tabela 1 · quanto custa esperar (capitalizado até o fechamento) ----
     s.addText("1 · QUANTO CUSTA ESPERAR — VALORES CAPITALIZADOS ATÉ O FECHAMENTO",
@@ -275,7 +278,7 @@ function addDecisaoTempoSlides(p, data, opts={}){
     const capT = T => P3 * (fat(T) - 1);
     const despT = T => custoM * sfvL(T);
     const t1 = [
-      [hdr(""), hdr(`vender em ${T12} meses (${T12-mRap} a mais)`), hdr(`vender em ${T24} meses (${T24-mRap} a mais)`)],
+      [hdr(""), hdr(`em ${T12} meses (+${T12-mRap})`), hdr(`em ${T24} meses (+${T24-mRap})`)],
       [cel(`capital parado — ${rEx(P3)} deixando de render ${pctM}`,{align:"left"}), cel(rEx(capT(T12))), cel(rEx(capT(T24)))],
       [cel("despesas do período (condomínio + IPTU), capitalizadas",{align:"left"}), cel(custoM===0?"—":rEx(despT(T12))), cel(custoM===0?"—":rEx(despT(T24)))],
       [cel("custo total de esperar",{align:"left",bold:true,fill:{color:PAPER}}), cel(rEx(capT(T12)+despT(T12)),{bold:true,fill:{color:PAPER}}), cel(rEx(capT(T24)+despT(T24)),{bold:true,fill:{color:PAPER}})],
@@ -283,14 +286,14 @@ function addDecisaoTempoSlides(p, data, opts={}){
        cel(rEx(P3+capT(T12)+despT(T12)),{bold:true,fill:{color:REDTINT},color:RED}),
        cel(rEx(P3+capT(T24)+despT(T24)),{bold:true,fill:{color:REDTINT},color:RED})],
     ];
-    s.addTable(t1,{x:MX,y:1.9,w:8.9,colW:[4.5,2.2,2.2],border:{type:"solid",color:LINE,pt:0.75},rowH:0.24,valign:"middle",fontFace:BODY,autoPage:false});
+    s.addTable(t1,{x:MX,y:1.9,w:8.9,colW:[5.1,1.9,1.9],border:{type:"solid",color:LINE,pt:0.75},rowH:0.24,valign:"middle",fontFace:BODY,autoPage:false,margin:0.04});
 
     // ---- Tabela 2 · prova dos cards: do valor de venda ao valor presente ----
     s.addText("2 · PROVA DOS CARDS — DO VALOR DE VENDA AO VALOR PRESENTE",
       {x:MX,y:3.30,w:8.9,h:0.22,fontFace:BODY,fontSize:9.5,color:RED,bold:true,charSpacing:1,align:"left",valign:"middle",margin:0});
     const f12 = fat(T12), f24 = fat(T24);
     const t2 = [
-      [hdr(""), hdr(`valor intermediário (${T12} meses)`), hdr(`valor superotimista (${T24} meses)`)],
+      [hdr(""), hdr(`intermediário (${T12} meses)`), hdr(`superotimista (${T24} meses)`)],
       [cel("valor de venda",{align:"left"}), cel(rEx(vInter)), cel(rEx(vOtim))],
       [cel(`fator do dinheiro no tempo — (1 + ${pctM.replace(" a.m.","")})^meses a mais`,{align:"left"}), cel("÷ " + f12.toFixed(4).replace(".", ",")), cel("÷ " + f24.toFixed(4).replace(".", ","))],
       ...(custoM !== 0 ? [[cel("(−) despesas do período, em valor presente",{align:"left"}), cel(rEx(-pvDesp(T12))), cel(rEx(-pvDesp(T24)))]] : []),
@@ -299,7 +302,7 @@ function addDecisaoTempoSlides(p, data, opts={}){
        cel(rEx(vpDe(vInter,T12)-P3),{bold:true,color:(vpDe(vInter,T12)-P3>=0?GREEN:RED)}),
        cel(rEx(vpDe(vOtim,T24)-P3),{bold:true,color:(vpDe(vOtim,T24)-P3>=0?GREEN:RED)})],
     ];
-    s.addTable(t2,{x:MX,y:3.56,w:8.9,colW:[4.5,2.2,2.2],border:{type:"solid",color:LINE,pt:0.75},rowH:0.24,valign:"middle",fontFace:BODY,autoPage:false});
+    s.addTable(t2,{x:MX,y:3.56,w:8.9,colW:[5.1,1.9,1.9],border:{type:"solid",color:LINE,pt:0.75},rowH:0.24,valign:"middle",fontFace:BODY,autoPage:false,margin:0.04});
 
     if (t2.length <= 5) s.addText("Leitura: o preço de equilíbrio mostra quanto o fechamento futuro precisaria superar para empatar com a venda rápida; o valor presente converte cada valor de venda para o equivalente em dinheiro de hoje, na mesma taxa.",
       {x:MX,y:3.56 + t2.length*0.28 + 0.06,w:8.9,h:0.24,fontFace:BODY,fontSize:8,color:MUTED,italic:true,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.05});
