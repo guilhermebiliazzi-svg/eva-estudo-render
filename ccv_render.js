@@ -155,7 +155,7 @@ function renderCcvHTML(saida, fatos) {
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>${CSS}</style></head><body>
 <div class="sheet">
   <div class="lh">
-    <img src="${LOGO}" alt="RE/MAX Ville — CRECI J 37.196" style="height:72px;width:auto;display:block">
+    <img src="${LOGO}" alt="REMAX Ville — CRECI J 37.196" style="height:72px;width:auto;display:block">
     <div class="meta"><b>Compromisso de Compra e Venda</b><br>${esc(endereco)}</div>
   </div>
   ${draft}
