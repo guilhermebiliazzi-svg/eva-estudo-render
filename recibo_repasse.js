@@ -132,7 +132,7 @@ async function montarPDF(repasse) {
   y -= 60;
 
   // rodapé
-  text("RE/MAX Ville · Ville Jardins Negócios Imobiliários · CRECI J 37.196",
+  text("REMAX Ville · Ville Jardins Negócios Imobiliários · CRECI J 37.196",
        M, 40, { size: 8, color: CINZA });
 
   return await doc.save();
