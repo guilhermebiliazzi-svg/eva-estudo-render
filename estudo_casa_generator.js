@@ -1,5 +1,5 @@
 /**
- * Gerador do Estudo de CASA DE RUA / TERRENO — RE/MAX Ville (PPTX editável).
+ * Gerador do Estudo de CASA DE RUA / TERRENO — REMAX Ville (PPTX editável).
  *
  *   const { buildEstudoCasa } = require("./estudo_casa_generator");
  *   await buildEstudoCasa(data, { assets: "/path/brand", out: "/path/estudo.pptx" });
@@ -18,29 +18,33 @@
 const pptxgen = require("pptxgenjs");
 const { addDecisaoTempoSlides } = require("./decisao_tempo_slide");
 
-const NAVY="10243F", RED="E4002B", ICE="CADCFC", WHITE="FFFFFF",
-      INK="1A2332", MUTED="6B7280", LINE="E2E8F0", PAPER="FBFBFC",
-      REDTINT="FCEFF1", ICETINT="EAF1FB", LINK="185FA5";
-const HEAD="Georgia", BODY="Calibri";
+// v4 · identidade REMAX 2026 — cores/fonte em brand.js
+const { C:B, FONT, TAN, marca, barra, tresBarras } = require("./brand");
+const { ASSET } = require("./brand_assets");
+const NAVY=B.NAVY, RED=B.RED, ICE=B.SKY, WHITE=B.WHITE,
+      INK=B.INK, MUTED=B.MUTED, LINE=B.LINE, PAPER=B.CREAM,
+      REDTINT=B.REDTINT, ICETINT=B.SKYTINT, LINK=B.BLUE;
+const LOGO_W=1200, LOGO_H=523;
+const HEAD=FONT, BODY=FONT;
 const H=5.625, MX=0.55;
 
 function buildEstudoCasa(data, opts={}){
   const A = (opts.assets || ".").replace(/\/$/,"") + "/";
   const out = opts.out || "Estudo_Casa.pptx";
   const p = new pptxgen();
-  p.layout="LAYOUT_16x9"; p.author=data.corretor?.unidade || "RE/MAX Ville";
+  p.layout="LAYOUT_16x9"; p.author=marca(data.corretor?.unidade || "REMAX Ville");
   p.title="Estudo de Mercado — " + (data.imovel?.predio_curto || "");
 
   // ---------- helpers (mesmos do estudo_generator.js) ----------
   const SH=()=>({type:"outer",color:"000000",blur:9,offset:3,angle:135,opacity:0.13});
   function eyebrow(s,txt,x=MX,y=0.42,color=RED){
-    s.addShape(p.shapes.RECTANGLE,{x:x,y:y+0.02,w:0.13,h:0.13,fill:{color:RED},line:{type:"none"}});
-    s.addText(txt.toUpperCase(),{x:x+0.22,y:y-0.05,w:7,h:0.28,fontFace:BODY,fontSize:11,
+    barra(p,s,{x:x,y:y-0.03,h:0.22,w:0.075,color:RED});
+    s.addText(txt.toUpperCase(),{x:x+0.27,y:y-0.05,w:7,h:0.28,fontFace:BODY,fontSize:11,
       color:color,bold:true,charSpacing:3,align:"left",valign:"middle",margin:0});
   }
   function eyebrowWhite(s,txt,x=MX,y=0.55){
-    s.addShape(p.shapes.RECTANGLE,{x:x,y:y+0.02,w:0.13,h:0.13,fill:{color:RED},line:{type:"none"}});
-    s.addText(txt.toUpperCase(),{x:x+0.22,y:y-0.05,w:6,h:0.28,fontFace:BODY,fontSize:11,
+    barra(p,s,{x:x,y:y-0.03,h:0.22,w:0.075,color:RED});
+    s.addText(txt.toUpperCase(),{x:x+0.27,y:y-0.05,w:6,h:0.28,fontFace:BODY,fontSize:11,
       color:WHITE,bold:true,charSpacing:3,align:"left",valign:"middle",margin:0});
   }
   function title(s,txt,y=0.72,color=NAVY,size=30){
@@ -48,8 +52,8 @@ function buildEstudoCasa(data, opts={}){
       bold:true,align:"left",valign:"middle",margin:0});
   }
   function footer(s,n,dark=false){
-    const c = dark ? "7F94B5" : MUTED;
-    s.addText((data.corretor?.unidade||"RE/MAX Ville")+" · Estudo de Mercado",
+    const c = dark ? B.NAVYMUTED : MUTED;
+    s.addText(marca(data.corretor?.unidade||"REMAX Ville")+" · Estudo de Mercado",
       {x:MX,y:5.28,w:5,h:0.25,fontFace:BODY,fontSize:8.5,color:c,align:"left",valign:"middle",margin:0});
     s.addText(String(n).padStart(2,"0"),{x:9.0,y:5.28,w:0.45,h:0.25,fontFace:BODY,
       fontSize:8.5,color:c,align:"right",valign:"middle",margin:0});
@@ -59,54 +63,65 @@ function buildEstudoCasa(data, opts={}){
     s.addText(small.toUpperCase(),{x:x,y:y+0.6,w:w,h:0.34,fontFace:BODY,fontSize:10,color:MUTED,bold:true,charSpacing:1.5,align:"left",valign:"top",margin:0});
   }
 
-  const im = data.imovel||{}, co = data.corretor||{}, val = data.valoracao||{};
+  const im = data.imovel||{}, val = data.valoracao||{};
+  const co = { ...(data.corretor||{}), unidade: marca((data.corretor||{}).unidade || "REMAX Ville") };
   const edata = (typeof data.estudo_data === "string" && data.estudo_data.trim())
               || new Date().toLocaleDateString("pt-BR");
 
-  // ===== SLIDE 1 — CAPA =====
+  // ===== SLIDE 1 — CAPA (modelo ACM do Guia de Marca, p. 172) =====
   { let s=p.addSlide(); s.background={color:NAVY};
-    if(im.foto_fachada) s.addImage({path:im.foto_fachada,x:6.95,y:0,w:3.05,h:H,sizing:{type:"cover",w:3.05,h:H}});
-    s.addShape(p.shapes.RECTANGLE,{x:6.95,y:0,w:0.05,h:H,fill:{color:RED},line:{type:"none"}});
-    s.addImage({path:A+"remax_white.png",x:MX,y:0.5,w:2.15,h:2.15*1264/2673});
-    eyebrowWhite(s,"Estudo de Mercado",MX,1.65);
-    s.addText(im.titulo||"",{x:MX,y:2.0,w:6.5,h:1.4,fontFace:HEAD,fontSize:29,color:WHITE,bold:true,
-      lineSpacingMultiple:1.05,align:"left",valign:"top",margin:0});
-    s.addText(im.subtitulo||"",{x:MX,y:3.45,w:6.3,h:0.4,fontFace:BODY,fontSize:13,color:ICE,align:"left",valign:"middle",margin:0});
+    const PX=6.05, dxCorte=H*TAN;
+    if(im.foto_fachada){
+      s.addImage({path:im.foto_fachada,x:PX,y:0,w:10-PX,h:H,sizing:{type:"cover",w:10-PX,h:H}});
+      s.addShape(p.shapes.CUSTOM_GEOMETRY,{x:PX,y:0,w:dxCorte,h:H,fill:{color:NAVY},line:{type:"none"},
+        points:[{x:0,y:0},{x:dxCorte,y:0},{x:0,y:H},{close:true}]});
+      barra(p,s,{x:PX-0.01,y:0,h:H,w:0.13,color:RED});
+    } else {
+      tresBarras(p,s,{x:7.2,y:4.55,h:0.55,w:0.42,gap:0.16});
+    }
+    barra(p,s,{x:MX,y:0,h:0.95,w:1.25,color:RED});
+    s.addText("ESTUDO DE MERCADO",{x:MX,y:1.32,w:5.3,h:0.3,fontFace:BODY,fontSize:12,color:ICE,bold:true,
+      charSpacing:3,align:"left",valign:"middle",margin:0});
+    s.addText(im.titulo||"",{x:MX,y:1.68,w:5.1,h:1.42,fontFace:HEAD,fontSize:27,color:WHITE,bold:true,
+      lineSpacingMultiple:1.02,align:"left",valign:"top",margin:0,fit:"shrink"});
+    s.addText(im.subtitulo||"",{x:MX,y:3.12,w:5.1,h:0.42,fontFace:BODY,fontSize:12.5,color:ICE,
+      align:"left",valign:"top",margin:0});
     s.addText([
       {text:"Preparado por "+(co.nome||""),options:{bold:true,color:WHITE,breakLine:true}},
-      {text:`CRECI ${co.creci||""} · ${co.unidade||""} · ${edata}`,options:{color:ICE}}
-    ],{x:MX,y:4.45,w:6,h:0.7,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+      {text:`CRECI ${co.creci||""} · ${edata}`,options:{color:ICE}}
+    ],{x:MX,y:3.72,w:5.1,h:0.55,fontFace:BODY,fontSize:11.5,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    s.addImage({data:ASSET.logoBranco,x:MX,y:4.45,w:1.65,h:1.65*LOGO_H/LOGO_W});
   }
 
-  // ===== SLIDE 2 — A RE/MAX (institucional, fixo) =====
+  // ===== SLIDE 2 — A REMAX (institucional, fixo) =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"01 · A Rede"); title(s,"A RE/MAX");
-    s.addText("De Denver (1973) a mais de 115 países e regiões — uma das maiores redes imobiliárias do mundo.",
+    eyebrow(s,"01 · A Rede"); title(s,"A REMAX");
+    s.addText("A marca que mais vende imóveis no Brasil — com a força de uma rede presente em mais de 120 países.",
       {x:MX,y:1.35,w:8.9,h:0.34,fontFace:BODY,fontSize:13.5,color:INK,italic:true,align:"left",valign:"middle",margin:0});
-    const stats=[["1973","Fundação",NAVY,0.6,1.98],["+145 mil","Corretores",RED,2.45,1.98],
-                 ["+9.000","Escritórios",RED,0.6,3.2],["+115","Países",NAVY,2.45,3.2]];
+    const stats=[["50 anos","de história",NAVY,0.6,1.98],["+120","países",RED,2.45,1.98],
+                 ["+600","imobiliárias no Brasil",RED,0.6,3.2],["+11 mil","profissionais no Brasil",NAVY,2.45,3.2]];
     stats.forEach(([big,small,col,x,y])=>{
       s.addText(big,{x:x,y:y,w:1.78,h:0.55,fontFace:HEAD,fontSize:25,color:col,bold:true,align:"left",valign:"middle",margin:0});
       s.addText(small.toUpperCase(),{x:x,y:y+0.52,w:1.78,h:0.3,fontFace:BODY,fontSize:10,color:MUTED,bold:true,charSpacing:1.2,align:"left",valign:"top",margin:0});
     });
-    s.addText("Maior volume de transações residenciais do setor — um profissional local respaldado por uma rede global.",
+    s.addText("Nº 1 do Brasil em vendas: R$ 14,3 bilhões em VGV em 2025, com 60% dos negócios fechados em rede.",
       {x:0.6,y:4.3,w:3.55,h:0.9,fontFace:BODY,fontSize:11.5,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.18});
-    s.addImage({path:A+"remax_map_official.png",x:4.45,y:1.95,w:5.3,h:5.3*432/1042});
+    s.addImage({data:ASSET.mapa,x:4.45,y:1.95,w:5.3,h:5.3*432/1042});
     s.addShape(p.shapes.RECTANGLE,{x:4.45,y:1.95,w:5.3,h:5.3*432/1042,fill:{type:"none"},line:{color:NAVY,width:1}});
-    s.addText("Em vermelho: países e regiões com presença RE/MAX",{x:4.45,y:4.32,w:5.3,h:0.25,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"center",valign:"middle",margin:0});
+    s.addText("Em vermelho: países e regiões com presença REMAX",{x:4.45,y:4.32,w:5.3,h:0.25,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"center",valign:"middle",margin:0});
     footer(s,2);
   }
 
-  // ===== SLIDE 3 — A RE/MAX VILLE (institucional) =====
+  // ===== SLIDE 3 — A REMAX VILLE (institucional) =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"02 · A Unidade"); title(s,"A "+(co.unidade||"RE/MAX Ville"));
-    statCard(s,MX,1.75,2.5,(data.unidade_stats?.anos||"5 anos"),"de RE/MAX",NAVY);
+    eyebrow(s,"02 · A Unidade"); title(s,"A "+co.unidade);
+    statCard(s,MX,1.75,2.5,(data.unidade_stats?.anos||"5 anos"),"de REMAX",NAVY);
     statCard(s,MX+2.7,1.75,2.5,(data.unidade_stats?.corretores||"30"),"corretores",RED);
-    s.addText(data.unidade_texto || "A RE/MAX Ville traz esse modelo para uma das regiões mais valorizadas de São Paulo. São cinco anos dentro da rede e uma equipe de 30 corretores que conhece de perto a dinâmica de preço, liquidez e perfil de comprador de cada microrregião. Trabalhamos com captação qualificada e venda em parceria: o imóvel ganha exposição na rede inteira — e é essa inteligência local somada à força de uma rede global que sustenta estudos como este, ancorados em dados reais.",
+    s.addText(marca(data.unidade_texto) || "A REMAX Ville traz esse modelo para uma das regiões mais valorizadas de São Paulo. São cinco anos dentro da rede e uma equipe de 30 corretores que conhece de perto a dinâmica de preço, liquidez e perfil de comprador de cada microrregião. Trabalhamos com captação qualificada e venda em parceria: o imóvel ganha exposição na rede inteira — e é essa inteligência local somada à força de uma rede global que sustenta estudos como este, ancorados em dados reais.",
       {x:MX,y:3.0,w:8.9,h:1.5,fontFace:BODY,fontSize:14.5,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
     const regs=data.unidade_regioes || ["Vila Mariana","Paraíso","Ibirapuera","Zona Sul"]; let rx=MX;
     regs.forEach(r=>{ const w=0.35+r.length*0.105;
-      s.addShape(p.shapes.ROUNDED_RECTANGLE,{x:rx,y:4.55,w:w,h:0.38,fill:{color:"EEF3FB"},line:{color:ICE,width:1},rectRadius:0.19});
+      s.addShape(p.shapes.ROUNDED_RECTANGLE,{x:rx,y:4.55,w:w,h:0.38,fill:{color:B.SKYTINT},line:{color:B.SKY,width:1},rectRadius:0.19});
       s.addText(r,{x:rx,y:4.55,w:w,h:0.38,fontFace:BODY,fontSize:11,color:NAVY,bold:true,align:"center",valign:"middle",margin:0}); rx+=w+0.15; });
     footer(s,3);
   }
@@ -120,8 +135,8 @@ function buildEstudoCasa(data, opts={}){
     const tx=4.05;
     s.addText(co.nome||"",{x:tx,y:1.8,w:5.4,h:0.6,fontFace:HEAD,fontSize:28,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
     s.addText(`CRECI ${co.creci||""} · ${co.unidade||""}`,{x:tx,y:2.42,w:5.4,h:0.34,fontFace:BODY,fontSize:12.5,color:RED,bold:true,charSpacing:1,align:"left",valign:"middle",margin:0});
-    const bioFallback = `Atua representando vendedores em ${co.unidade||"RE/MAX Ville"}, com método: precificação fundamentada em dados de ITBI, exposição na rede RE/MAX e negociação conduzida com discrição e transparência — para anunciar pelo valor certo e vender no tempo certo.`;
-    s.addText(co.bio||bioFallback,{x:tx,y:2.95,w:5.45,h:1.8,fontFace:BODY,fontSize:14,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
+    const bioFallback = `Atua representando vendedores em ${co.unidade}, com método: precificação fundamentada em dados de ITBI, exposição na rede REMAX e negociação conduzida com discrição e transparência — para anunciar pelo valor certo e vender no tempo certo.`;
+    s.addText(marca(co.bio)||bioFallback,{x:tx,y:2.95,w:5.45,h:1.8,fontFace:BODY,fontSize:14,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.22});
     footer(s,4);
   }
 
@@ -135,7 +150,7 @@ function buildEstudoCasa(data, opts={}){
     cards.forEach((c,i)=>{ const x=MX+i*(cw+gap);
       s.addShape(p.shapes.RECTANGLE,{x:x,y:y0,w:cw,h:ch,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
       s.addShape(p.shapes.RECTANGLE,{x:x,y:y0,w:cw,h:0.09,fill:{color:RED},line:{type:"none"}});
-      s.addText(String(i+1),{x:x+0.25,y:y0+0.3,w:0.8,h:0.7,fontFace:HEAD,fontSize:34,color:ICE,bold:true,align:"left",valign:"middle",margin:0});
+      s.addText(String(i+1),{x:x+0.25,y:y0+0.3,w:0.8,h:0.7,fontFace:HEAD,fontSize:34,color:RED,bold:true,align:"left",valign:"middle",margin:0});
       s.addText(c[0],{x:x+0.25,y:y0+1.0,w:cw-0.5,h:0.6,fontFace:HEAD,fontSize:15.5,color:NAVY,bold:true,align:"left",valign:"top",margin:0});
       s.addText(c[1],{x:x+0.25,y:y0+1.6,w:cw-0.5,h:1.0,fontFace:BODY,fontSize:12,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.18});
     });
@@ -151,7 +166,7 @@ function buildEstudoCasa(data, opts={}){
       {text:"captação e gestão",options:{fontSize:10.5,color:ICE}}],
       {x:MX,y:hy,w:2.3,h:1.0,fontFace:HEAD,align:"center",valign:"middle",margin:0,lineSpacingMultiple:1.05});
     s.addShape(p.shapes.LINE,{x:MX+2.3,y:hy+0.5,w:0.55,h:0,line:{color:RED,width:2.5,endArrowType:"triangle"}});
-    const portals=["Zap Imóveis","VivaReal","Chaves na Mão","RE/MAX.com","Instagram"];
+    const portals=["Zap Imóveis","VivaReal","Chaves na Mão","remax.com.br","Instagram"];
     const px=3.5, pw=6.0, ph=0.62, pg=0.14;
     portals.forEach((pt,i)=>{ const col=i%2, row=Math.floor(i/2);
       const x=px+col*(pw/2), w=pw/2-0.1, y=hy-0.55+row*(ph+pg);
@@ -216,9 +231,9 @@ function buildEstudoCasa(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"08 · Comparáveis"); title(s,"Casas vendidas na região — ITBI");
     s.addText("Vendas reais próximas · Prefeitura de São Paulo",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
-    const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
+    const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:10,align:"center",valign:"middle"}});
     const head=["Data","Endereço","Terreno","Constr.","Valor","R$/m² terr."].map(hdr);
-    const cell=(t,o={})=>({text:String(t),options:{fontSize:10.5,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
+    const cell=(t,o={})=>({text:String(t),options:{fontSize:9.5,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
     // 09/08/2023 -> 09/08/23: evita a coluna Data quebrar em 2 linhas
     const shortData = d => String(d||"").replace(/^(\d{2}\/\d{2}\/)\d{2}(\d{2})$/, "$1$2");
     const allComps = data.comps||[];
@@ -231,11 +246,11 @@ function buildEstudoCasa(data, opts={}){
       cell(c.endereco,{align:"left"}),
       cell(c.area_terreno),
       cell(c.area_construida),
-      cell(c.valor),
+      cell(String(c.valor||"").replace(/,00$/,"")),
       cell(c.rs_m2_terreno,{bold:true}),
     ]);
     s.addTable([head,...rows],{x:MX,y:1.7,w:5.95,colW:[1.0,1.85,0.95,0.85,1.15,1.15].map(w=>w*5.95/(1.0+1.85+0.95+0.85+1.15+1.15)),
-      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false});
+      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
     // callout: estatística do R$/m² de terreno (o que sustenta a faixa)
     const cx=6.75, cw=2.7;
     s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
@@ -303,7 +318,7 @@ function buildEstudoCasa(data, opts={}){
   // ===== SLIDE 11 — CICLO DE VIDA (fixo + marcador de idade) =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
-    s.addImage({path:A+"ciclo_vida.png",x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
+    s.addImage({data:ASSET.cicloVida,x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
     if (im.idade_anos != null) {
       const imgX=MX, imgY=1.55, imgW=6.55, imgH=6.55*5.0/10.6;
       const PL=0.07, PR=0.97, PT=0.14, PB=0.76;
@@ -354,11 +369,12 @@ function buildEstudoCasa(data, opts={}){
 
   // ===== SLIDE 13 — CONCLUSÃO (valor de mercado + faixa) =====
   { let s=p.addSlide(); s.background={color:NAVY};
+    barra(p,s,{x:8.05,y:0,h:0.8,w:1.05,color:RED});
     eyebrowWhite(s,"Conclusão",MX,0.55);
     s.addText("Valor de mercado estimado",{x:MX,y:1.15,w:9,h:0.5,fontFace:HEAD,fontSize:20,color:ICE,align:"left",valign:"middle",margin:0});
     s.addText(val.valor_mercado||"",{x:MX,y:1.7,w:9,h:1.1,fontFace:HEAD,fontSize:60,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
     s.addText("faixa de "+(val.faixa||""),{x:MX,y:2.85,w:9,h:0.4,fontFace:BODY,fontSize:15,color:ICE,align:"left",valign:"middle",margin:0});
-    s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:"15294A"},line:{color:"24395C",width:1}});
+    s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:5.6,h:1.3,fill:{color:B.DARKBLUE},line:{color:B.NAVYLINE,width:1}});
     s.addShape(p.shapes.RECTANGLE,{x:MX,y:3.55,w:0.09,h:1.3,fill:{color:RED},line:{type:"none"}});
     s.addText([{text:"Valor do terreno (mediana)",options:{fontSize:11,color:ICE,bold:true,charSpacing:1,breakLine:true}},
       {text:val.rs_m2_terreno_alvo||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
@@ -373,15 +389,16 @@ function buildEstudoCasa(data, opts={}){
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
+    barra(p,s,{x:8.05,y:0,h:0.8,w:1.05,color:RED});
     eyebrowWhite(s,"Ressalvas e Contato",MX,0.55);
     s.addText("Sobre este estudo",{x:MX,y:1.05,w:9,h:0.55,fontFace:HEAD,fontSize:24,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText(data.ressalvas || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação separa terreno e construção (método do custo): o terreno pelo R$/m² de casas comparáveis vendidas na região (corrigido pelo IPCA), e a construção pelo custo de reposição depreciado conforme a idade. Na ausência da idade dos comparáveis, aplica-se depreciação uniforme.",
+    s.addText(marca(data.ressalvas) || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação separa terreno e construção (método do custo): o terreno pelo R$/m² de casas comparáveis vendidas na região (corrigido pelo IPCA), e a construção pelo custo de reposição depreciado conforme a idade. Na ausência da idade dos comparáveis, aplica-se depreciação uniforme.",
       {x:MX,y:1.7,w:8.9,h:1.4,fontFace:BODY,fontSize:13,color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
-    s.addShape(p.shapes.LINE,{x:MX,y:3.35,w:8.9,h:0,line:{color:"24395C",width:1}});
-    s.addImage({path:A+"remax_white.png",x:MX,y:3.65,w:2.1,h:2.1*1264/2673});
+    s.addShape(p.shapes.LINE,{x:MX,y:3.35,w:8.9,h:0,line:{color:B.NAVYLINE,width:1}});
+    s.addImage({data:ASSET.logoBranco,x:MX,y:3.7,w:2.2,h:2.2*LOGO_H/LOGO_W});
     s.addText([{text:co.nome||"",options:{fontSize:20,bold:true,color:WHITE,breakLine:true}},
       {text:`CRECI ${co.creci||""} · ${co.unidade||""}`,options:{fontSize:13,color:ICE,breakLine:true}},
-      {text:edata,options:{fontSize:11,color:"7F94B5"}}],
+      {text:edata,options:{fontSize:11,color:B.NAVYMUTED}}],
       {x:6.0,y:3.7,w:3.45,h:1.2,fontFace:HEAD,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.15});
   }
 
