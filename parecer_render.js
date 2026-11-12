@@ -1,23 +1,26 @@
-const CSS = `:root{
-    --navy:#0e2545; --navy2:#16335c; --ice:#e9f0fa; --paper:#fff; --bg:#eef2f8;
-    --ink:#1b2740; --muted:#5d6e89; --red:#d8222f; --line:#dde5f0;
+// v4 · identidade REMAX 2026 (Guia de Execução e Liderança de Marca): Bridge Blue #0C2749,
+// Primary Red #FF1200, Cream #F7F5EE, Montserrat (fonte web oficial). ok/warn seguem como cores de status.
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+  :root{
+    --navy:#0C2749; --navy2:#1C3A66; --ice:#E6F1FA; --paper:#fff; --bg:#F7F5EE;
+    --ink:#232323; --muted:#5F6B7A; --red:#FF1200; --line:#E2DFD6;
     --ok:#1c7a4e; --okbg:#e7f4ec; --warn:#9a6a16; --warnbg:#fbf2dd;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font-family:'Inter',-apple-system,'Segoe UI',Roboto,sans-serif;
+    font-family:'Montserrat',Arial,-apple-system,'Segoe UI',sans-serif;
     font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
   .sheet{max-width:840px;margin:28px auto;background:var(--paper);
-    box-shadow:0 6px 28px rgba(14,37,69,.12);border-radius:4px;overflow:hidden}
+    box-shadow:0 6px 28px rgba(12,39,73,.12);border-radius:4px;overflow:hidden}
   .pad{padding:44px 56px}
-  h1,h2,h3,.serif{font-family:'Spectral',Georgia,serif}
+  h1,h2,h3,.serif{font-family:'Montserrat',Arial,sans-serif}
 
   /* letterhead */
   .lh{display:flex;justify-content:space-between;align-items:flex-start;
     padding:22px 56px;border-bottom:1px solid var(--line)}
-  .mark{font-family:'Spectral',serif;font-weight:700;font-size:20px;letter-spacing:.5px;color:var(--navy)}
+  .mark{font-family:'Montserrat',Arial,sans-serif;font-weight:700;font-size:20px;letter-spacing:.5px;color:var(--navy)}
   .mark b{color:var(--red)}
-  .mark span{display:block;font-family:'Inter';font-weight:600;font-size:11px;
+  .mark span{display:block;font-family:'Montserrat',Arial,sans-serif;font-weight:600;font-size:11px;
     letter-spacing:3px;color:var(--muted);margin-top:1px}
   .lh .meta{text-align:right;font-size:12px;color:var(--muted);line-height:1.7}
   .lh .meta b{color:var(--ink)}
@@ -40,13 +43,15 @@ const CSS = `:root{
   /* hero */
   .eyebrow{font-size:11px;letter-spacing:3px;text-transform:uppercase;
     color:var(--red);font-weight:700}
+  .eyebrow::before{content:"";display:inline-block;width:6px;height:14px;background:var(--red);
+    transform:skewX(-27.5deg);margin-right:11px;vertical-align:-2px}
   h1{font-size:32px;line-height:1.15;margin:10px 0 6px;color:var(--navy);font-weight:700}
   .lead{color:var(--muted);font-size:14.5px;max-width:62ch}
 
   .verdict{margin-top:26px;background:var(--navy);border-radius:10px;
     padding:24px 26px;position:relative;overflow:hidden}
   .verdict::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--red)}
-  .badge{display:inline-block;font-family:'Spectral',serif;font-weight:700;
+  .badge{display:inline-block;font-family:'Montserrat',Arial,sans-serif;font-weight:700;
     font-size:13px;letter-spacing:2px;color:#fff;background:rgba(255,255,255,.12);
     border:1px solid rgba(255,255,255,.28);padding:6px 14px;border-radius:30px;margin-bottom:12px}
   .verdict p{margin:0;color:var(--ice);font-size:14px;line-height:1.65}
@@ -55,7 +60,7 @@ const CSS = `:root{
   section{margin-top:36px}
   .snum{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .snum .n{flex:none;width:30px;height:30px;border-radius:7px;background:var(--navy);
-    color:#fff;font-family:'Spectral',serif;font-weight:700;display:flex;
+    color:#fff;font-family:'Montserrat',Arial,sans-serif;font-weight:700;display:flex;
     align-items:center;justify-content:center;font-size:15px}
   .snum h2{margin:0;font-size:21px;color:var(--navy);font-weight:600}
 
@@ -82,8 +87,8 @@ const CSS = `:root{
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:6px 0 14px}
   .stat{background:var(--ice);border-radius:9px;padding:16px 18px}
   .stat .l{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--navy2);font-weight:700}
-  .stat .num{font-family:'Spectral',serif;font-size:26px;font-weight:700;color:var(--navy);margin-top:4px}
-  .stat.hl{background:var(--navy)} .stat.hl .l{color:#9fb4d4} .stat.hl .num{color:#fff}
+  .stat .num{font-family:'Montserrat',Arial,sans-serif;font-size:26px;font-weight:700;color:var(--navy);margin-top:4px}
+  .stat.hl{background:var(--navy)} .stat.hl .l{color:#A3D4F2} .stat.hl .num{color:#fff}
 
   /* tables */
   table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
@@ -93,7 +98,7 @@ const CSS = `:root{
   tr:last-child td{border-bottom:none}
   .chip{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.4px;
     padding:3px 9px;border-radius:20px;text-transform:uppercase}
-  .chip.pessoal{background:#eef2f8;color:var(--navy2)}
+  .chip.pessoal{background:#E6F1FA;color:var(--navy2)}
   .chip.propter{background:#fbf2dd;color:var(--warn)}
   .chip.nao{background:var(--okbg);color:var(--ok)}
 
@@ -103,7 +108,7 @@ const CSS = `:root{
     border-radius:6px;padding:9px 13px;font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:1px}
   .inv-h span{font-size:11.5px;color:var(--navy2);font-weight:600}
   .inv-grp table{margin-top:0}
-  .inv-grp td{padding:7px 13px;font-size:12.7px;border-bottom:1px solid #eef2f8}
+  .inv-grp td{padding:7px 13px;font-size:12.7px;border-bottom:1px solid #EFECE3}
   .st{white-space:nowrap;font-size:12px;font-weight:600}
   .st.ok{color:var(--ok)} .st.proc{color:var(--muted)} .st.warn{color:var(--warn)} .st.red{color:var(--red)}
   .ab{text-align:right;white-space:nowrap;width:62px}
@@ -118,7 +123,7 @@ const CSS = `:root{
   .cond h3{margin:0 0 4px;font-size:16px;color:var(--navy)}
   .cond p{margin:0 0 7px;font-size:13.7px}
   .tags{display:flex;flex-wrap:wrap;gap:7px}
-  .tag{font-size:11px;background:#eef2f8;color:var(--navy2);padding:3px 9px;border-radius:5px}
+  .tag{font-size:11px;background:#E6F1FA;color:var(--navy2);padding:3px 9px;border-radius:5px}
   .tag b{color:var(--ink)}
 
   /* pilares */
@@ -157,12 +162,12 @@ function head(saida, fatos){
   const ref = saida.ref
     || (im.matricula ? ("Matrícula " + im.matricula + (im.ri ? " — " + im.ri : "")) : "")
     || im.descricao || "";
-  return `<div class="lh"><img src="${LOGO}" alt="RE/MAX Ville — CRECI J 37.196" style="height:88px;width:auto;display:block">
+  return `<div class="lh"><img src="${LOGO}" alt="REMAX Ville — CRECI J 37.196" style="height:88px;width:auto;display:block">
     <div class="meta"><div><b>Parecer de diligência</b></div><div>São Paulo${data?(" · "+esc(data)):""}</div>${ref?`<div>Ref.: ${esc(ref)}</div>`:""}</div></div>`;
 }
 function review(saida){
   const it=[];
-  (saida.alertas||[]).forEach(a=>{const sev=String(a.severidade||"").toLowerCase();const cls=sev==="media"?"sev media":"sev";const w=sev==="media"?"média":(sev==="alta"?"alta":"baixa");it.push(`<li><span class="${cls}">${w}</span> ${esc(a.descricao)}${a.campo?` <span style="color:#5d6e89">(${esc(a.campo)})</span>`:""}</li>`);});
+  (saida.alertas||[]).forEach(a=>{const sev=String(a.severidade||"").toLowerCase();const cls=sev==="media"?"sev media":"sev";const w=sev==="media"?"média":(sev==="alta"?"alta":"baixa");it.push(`<li><span class="${cls}">${w}</span> ${esc(a.descricao)}${a.campo?` <span style="color:#5F6B7A">(${esc(a.campo)})</span>`:""}</li>`);});
   ((saida._validacao&&saida._validacao.alertas)||[]).forEach(t=>it.push(`<li><span class="sev">checagem</span> ${esc(t)}</li>`));
   if(!it.length) return "";
   return `<div class="review"><div class="rt">Para sua revisão · visível só para o aprovador</div><ul>${it.join("")}</ul></div>`;
@@ -212,12 +217,12 @@ function s3(fatos){
     blocos+=`<div class="inv-grp"><div class="inv-h">${esc(tit)}${esc(doc)} <span>${conc}/${rows.length} concluídas</span></div><table>${trs}</table></div>`;
   });
   if(tb.length){
-    const trs=tb.map(d=>{const link=d.url?`<a href="${esc(d.url)}" target="_blank">abrir →</a>`:"—";return `<tr><td>${esc(d.descricao)}${d.titular?` <span style="color:#5d6e89">· ${esc(d.titular)}</span>`:""}</td><td class="st ok">Anexado</td><td class="ab">${link}</td></tr>`;}).join("");
+    const trs=tb.map(d=>{const link=d.url?`<a href="${esc(d.url)}" target="_blank">abrir →</a>`:"—";return `<tr><td>${esc(d.descricao)}${d.titular?` <span style="color:#5F6B7A">· ${esc(d.titular)}</span>`:""}</td><td class="st ok">Anexado</td><td class="ab">${link}</td></tr>`;}).join("");
     blocos+=`<div class="inv-grp"><div class="inv-h">Documentos complementares (Tier B)</div><table>${trs}</table></div>`;
   }
   return `<section><div class="snum"><div class="n">3</div><h2>Inventário de certidões</h2></div>
     <p>Levantamento das certidões por titular. Cada item leva ao PDF hospedado no Google Drive do escritório, pelo link <em>abrir</em>.</p>
-    ${blocos}<p class="concl-parcial">Fonte: Painel de diligência RE/MAX Ville. Documentos hospedados no Google Drive; acesso pelos links indicados.</p></section>`;
+    ${blocos}<p class="concl-parcial">Fonte: Painel de diligência REMAX Ville. Documentos hospedados no Google Drive; acesso pelos links indicados.</p></section>`;
 }
 function s4(s){
   if(!s||!s.forma) return "";
