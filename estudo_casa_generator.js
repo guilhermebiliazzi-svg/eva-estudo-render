@@ -350,7 +350,7 @@ function buildEstudoCasa(data, opts={}){
     pontaTxt(RG.min, "menor R$/m²", "left", MX);
     pontaTxt(RG.max, "maior R$/m²", "right", MX + 8.9 - 2.9);
     const nFora = PAR.lista.filter(x => !x.na_conta).length;
-    s.addText(`${RG.n_total} vendas na região · ${RG.n_final} consideradas (descartadas: ${RG.desc_lote} por lote muito diferente e ${RG.desc_curva} com valor fora da curva). Valores de hoje = preço pago corrigido pelo IPCA.${val.pondera_distancia ? " As vendas mais próximas pesam mais." : ""}${nFora ? ` "Fora da curva" aparece na lista, mas não entra no cálculo.` : ""} ★ = a mais parecida.`,
+    s.addText(`${RG.n_total} vendas na região · ${RG.n_final} consideradas (descartadas: ${RG.desc_lote} por lote muito diferente e ${RG.desc_curva} com valor fora da curva). Valores de hoje = preço pago corrigido pelo IPCA.${val.pondera_distancia && val.pondera_tempo ? " As vendas mais próximas e mais recentes pesam mais." : val.pondera_distancia ? " As vendas mais próximas pesam mais." : val.pondera_tempo ? " As vendas mais recentes pesam mais." : ""}${nFora ? ` "Fora da curva" aparece na lista, mas não entra no cálculo.` : ""} ★ = a mais parecida.`,
       {x:MX,y:by+0.32,w:8.9,h:0.3,fontFace:BODY,fontSize:7.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.0});
     footer(s,9);
   }
