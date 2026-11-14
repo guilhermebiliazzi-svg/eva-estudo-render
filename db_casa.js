@@ -30,6 +30,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   abs((numero::text)::int - $2::int)                          AS dist
 FROM vendidos_itbi_usados
@@ -54,6 +55,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   round(ST_Distance(geom::geography, $1::geography))          AS dist
 FROM vendidos_itbi_usados
@@ -81,6 +83,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   0                                                           AS dist
 FROM vendidos_itbi_usados
@@ -104,6 +107,7 @@ const mapRow = r => ({
   area_terreno: Number(r.area_terreno),
   area_construida: r.area_construida == null ? null : Number(r.area_construida),
   valor: Number(r.valor),
+  ano_construcao: r.ano_construcao || null,   // 14/11: idade real p/ a depreciação
   rs_m2_terreno: r.rs_m2_terreno == null ? null : Number(r.rs_m2_terreno),
   dist: r.dist == null ? null : Number(r.dist),
 });
