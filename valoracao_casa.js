@@ -78,6 +78,29 @@ function quantil(arrOrdenado, q) {
   return lo === hi ? arrOrdenado[lo] : arrOrdenado[lo] + (arrOrdenado[hi] - arrOrdenado[lo]) * (pos - lo);
 }
 
+// 14/11 · quantil PONDERADO (pontos no meio do peso acumulado, interpolação linear).
+// Com pesos iguais dá o mesmo resultado do quantil comum.
+function mesAnoTxt(d) {
+  const x = parseDataBR(d); const M = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  return Number.isFinite(x.mes) ? `${M[x.mes - 1]}/${x.ano}` : String(d || "");
+}
+function quantilP(itens, q) {
+  const xs = itens.filter(x => Number.isFinite(x.v) && x.w > 0).sort((a, b) => a.v - b.v);
+  const n = xs.length;
+  if (!n) return NaN;
+  if (n === 1) return xs[0].v;
+  const W = xs.reduce((s, x) => s + x.w, 0);
+  let acc = 0;
+  const pos = xs.map(x => { const p = (acc + x.w / 2) / W; acc += x.w; return p; });
+  const p0 = pos[0], p1 = pos[n - 1];
+  // normaliza para 0..1 entre o primeiro e o último ponto (como o quantil comum)
+  const t = p0 + (p1 - p0) * q;
+  for (let i = 0; i < n - 1; i++) {
+    if (t <= pos[i + 1]) { const f = (t - pos[i]) / (pos[i + 1] - pos[i] || 1); return xs[i].v + (xs[i + 1].v - xs[i].v) * Math.max(0, Math.min(1, f)); }
+  }
+  return xs[n - 1].v;
+}
+
 function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const cub = Number(opts.cub);
   if (!Number.isFinite(cub) || cub <= 0) {
@@ -110,6 +133,12 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const plottageExp   = opts.plottageExp   ?? 0;     // TRAVA 3: 0 = desligada
   const tetoMediana   = opts.tetoMediana   ?? 1.4;   // TRAVA 4: descarta comps com R$/m² acima de N× a mediana local (corta luxo vizinho)
   const valorMinimo   = opts.valorMinimo   ?? 50000; // descarta vendas-lixo (ex.: R$ 1.700 = erro de cadastro)
+  // 14/11 (caso Diogo de Faria 109): a mediana simples do raio inteiro misturava a quadra do metrô com
+  // bairros mais baratos e cortava como "fora da curva" justamente as vendas coladas no imóvel.
+  // Agora cada venda pesa pela DISTÂNCIA (metade do peso a `distEscala` metros) e a venda anterior do
+  // PRÓPRIO imóvel (mesmo lote) entra com peso `pesoPropria` e nunca é cortada.
+  const distEscala    = opts.distEscala    ?? 0;     // 0 = sem peso por distância (modo rua / condomínio)
+  const pesoPropria   = opts.pesoPropria   ?? 3;
 
   const hoje   = new Date();
   const r      = ref ? parseDataBR(ref) : null;
@@ -142,7 +171,9 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
     const valTerreno = Math.max(valorCorr - valConstr, valorCorr * pisoTerrenoFrac);
     const rs         = valTerreno / terreno;
 
-    todos.push({ ...c, valor: valorOrig, valor_corr: valorCorr, terreno, rs_num: rs });
+    const dist = Number(c.dist);
+    const w = c.propria ? pesoPropria : (distEscala > 0 && Number.isFinite(dist) ? 1 / (1 + Math.pow(dist / distEscala, 2)) : 1);
+    todos.push({ ...c, valor: valorOrig, valor_corr: valorCorr, terreno, rs_num: rs, w });
   }
   if (!todos.length) {
     const err = new Error("buildValoracaoCasa: nenhum comparável válido (terreno e valor > 0).");
@@ -152,7 +183,7 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
 
   // ---- TRAVA 1: faixa de tamanho de lote ----
   const loLote = loteBandLo * areaTerr, hiLote = loteBandHi * areaTerr;
-  let usados = todos.filter(x => x.terreno >= loLote && x.terreno <= hiLote);
+  let usados = todos.filter(x => x.propria || (x.terreno >= loLote && x.terreno <= hiLote));
   let faixaLoteRelaxada = false;
   if (usados.length < minCompsBanda) { usados = todos.slice(); faixaLoteRelaxada = true; }
   const nPosBanda = usados.length;
@@ -163,11 +194,11 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   }
 
   // ---- TRAVA 2: trim de outlier (cerca IQR) sobre o R$/m² limpo ----
-  const rsParaTrim = usados.map(x => x.rs_num).sort((a, b) => a - b);
-  const q1 = quantil(rsParaTrim, 0.25), q3 = quantil(rsParaTrim, 0.75);
+  const P = arr => arr.map(x => ({ v: x.rs_num, w: x.w }));
+  const q1 = quantilP(P(usados), 0.25), q3 = quantilP(P(usados), 0.75);
   const iqr = q3 - q1;
   const cercaLo = q1 - iqrK * iqr, cercaHi = q3 + iqrK * iqr;
-  const trimmed = usados.filter(x => x.rs_num >= cercaLo && x.rs_num <= cercaHi);
+  const trimmed = usados.filter(x => x.propria || (x.rs_num >= cercaLo && x.rs_num <= cercaHi));
   let trimRelaxado = false;
   if (trimmed.length >= minCompsTrim) { usados = trimmed; } else { trimRelaxado = true; }
 
@@ -176,9 +207,8 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   // venda de parte, negócio entre parentes, casa para demolir, erro de cadastro.
   let tetoRelaxado = false;
   if (tetoMediana > 0 && usados.length >= minCompsTrim) {
-    const arrTeto = usados.map(x => x.rs_num).sort((a, b) => a - b);
-    const medLocal = quantil(arrTeto, 0.50);
-    const naBanda = usados.filter(x => x.rs_num <= tetoMediana * medLocal && x.rs_num >= medLocal / tetoMediana);
+    const medLocal = quantilP(P(usados), 0.50);   // centro ponderado: as vendas perto do imóvel mandam
+    const naBanda = usados.filter(x => x.propria || (x.rs_num <= tetoMediana * medLocal && x.rs_num >= medLocal / tetoMediana));
     if (naBanda.length >= minCompsTrim) { usados = naBanda; } else { tetoRelaxado = true; }
   }
 
@@ -186,12 +216,13 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
 
   // 2) mediana / p25 / p75 sobre o conjunto JÁ SELECIONADO
   const rsLimpo = usados.map(x => x.rs_num).sort((a, b) => a - b);
-  const mediana = quantil(rsLimpo, 0.50);
-  const p25     = quantil(rsLimpo, 0.25);
-  const p75     = quantil(rsLimpo, 0.75);
+  const mediana = quantilP(P(usados), 0.50);
+  const p25     = quantilP(P(usados), 0.25);
+  const p75     = quantilP(P(usados), 0.75);
+  const propria = todos.find(x => x.propria) || null;
 
   // comps enriquecidos p/ a tabela (só os SELECIONADOS, p/ casar com o headline)
-  const enriched = usados.map(({ rs_num, terreno, ...rest }) => ({ ...rest, rs_m2_terreno: Math.round(rs_num) }));
+  const enriched = usados.map(({ rs_num, terreno, w, ...rest }) => ({ ...rest, rs_m2_terreno: Math.round(rs_num) }));
 
   // 3) avaliando: terreno (faixa) + construção depreciada (ponto fixo)
   //    sem a idade da casa avaliada → idade mediana dos comparáveis selecionados (mesma época do bairro)
@@ -230,24 +261,25 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const PL = [0.75, 1.30], PC = [0.70, 1.45];
   const naBandaPar = (areaConstr > 0) ? todos.filter(x => {
     const ac = Number(x.area_construida || 0);
+    if (x.propria) return true;
     return x.terreno >= PL[0] * areaTerr && x.terreno <= PL[1] * areaTerr && ac >= PC[0] * areaConstr && ac <= PC[1] * areaConstr;
   }) : [];
   // erro de cadastro / venda de parte (ex.: R$ 165 mil numa casa de 185 m²): fora até da lista
   const medPar = naBandaPar.length ? quantil(naBandaPar.map(x => x.valor_corr).sort((a, b) => a - b), 0.5) : 0;
-  const parecidasTodas = naBandaPar.filter(x => x.valor_corr >= 0.4 * medPar);
+  const parecidasTodas = naBandaPar.filter(x => x.propria || x.valor_corr >= 0.4 * medPar);
   const chaveV = x => [x.data, x.logradouro, x.numero, x.valor].join("|");
   const naConta = new Set(usados.map(chaveV));
   const dif = x => Math.abs(Math.log(x.terreno / areaTerr)) + Math.abs(Math.log(Number(x.area_construida) / areaConstr));
   const fmtP = x => ({ logradouro: x.logradouro || null, numero: x.numero ?? null, data: x.data,
     area_terreno: x.terreno, area_construida: Number(x.area_construida), ano_construcao: x.ano_construcao ?? null,
     valor: Number(x.valor), valor_corr: Math.round(x.valor_corr), na_conta: naConta.has(chaveV(x)),
-    lat: x.lat ?? null, lng: x.lng ?? null });   // 14/11: link do Google Maps
+    lat: x.lat ?? null, lng: x.lng ?? null, propria: !!x.propria });   // 14/11: link do Google Maps
   const parecidas = parecidasTodas.length >= 3 ? {
     n: parecidasTodas.length,
     lote: [Math.round(PL[0] * areaTerr), Math.round(PL[1] * areaTerr)],
     constr: [Math.round(PC[0] * areaConstr), Math.round(PC[1] * areaConstr)],
     lista: parecidasTodas.slice().sort((a, b) => b.valor_corr - a.valor_corr).map(fmtP),
-    mais_parecida: fmtP(parecidasTodas.slice().sort((a, b) => dif(a) - dif(b))[0]),
+    mais_parecida: fmtP(parecidasTodas.filter(x => !x.propria).sort((a, b) => dif(a) - dif(b))[0] || parecidasTodas[0]),
     valores_corr: parecidasTodas.map(x => Math.round(x.valor_corr)).sort((a, b) => a - b),
     descartadas_erro: naBandaPar.length - parecidasTodas.length,
   } : null;
@@ -264,7 +296,11 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
     area_terreno:       areaTerr,
     n_comps:            rsLimpo.length,
     conclusao_apoio:    `Valor = terreno (${milhoes(valorTerreno)}) + construção depreciada (${reais(valConstrAval)}). `
-                      + `Terreno pela mediana de ${rsLimpo.length} casas vendidas (ITBI), corrigida pelo IPCA.`,
+                      + `Terreno pela mediana de ${rsLimpo.length} casas vendidas (ITBI), corrigida pelo IPCA`
+                      + (distEscala > 0 ? ", com mais peso para as mais próximas" : "")
+                      + (propria ? `. Este imóvel foi vendido em ${mesAnoTxt(propria.data)} por ${milhoes(propria.valor)} (${milhoes(propria.valor_corr)} hoje).` : "."),
+    venda_propria: propria ? { data: propria.data, valor: Math.round(propria.valor), valor_corr: Math.round(propria.valor_corr) } : null,
+    pondera_distancia: distEscala > 0,
     // comps enriquecidos p/ a tabela (orchestrator pode usar estes no lugar dos crus)
     comps: enriched,
     regua,
