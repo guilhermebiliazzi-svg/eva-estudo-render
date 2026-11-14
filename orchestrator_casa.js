@@ -11,7 +11,7 @@
  * O `corretor` chega PRONTO no body (resolvido no n8n pelo phone), igual ao apartamento —
  * o orchestrator só repassa.
  */
-const { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio } = require("./db_casa");
+const { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio, fetchVendaPropria } = require("./db_casa");
 const { buildValoracaoCasa } = require("./valoracao_casa");
 const { buildEstudoCasa } = require("./estudo_casa_generator");
 const { buildDecisaoTempo, cdiLiquido } = require("./decisao_tempo");
@@ -186,7 +186,9 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     comps,
     avaliando: { area_terreno: body.area_terreno, area_construida: body.area_construida, idade: imovel.idade_anos },
     ref: body.ref || body.estudo_data,
-    opts: { cub },
+    // 14/11: com o ponto do lote (raio geográfico), as vendas mais próximas pesam mais (metade do peso a
+    // 500 m) e a banda de "fora da curva" é ±60% do centro ponderado (antes ±40% da mediana do raio todo).
+    opts: { cub, distEscala: body.ponto ? 500 : 0, tetoMediana: body.ponto ? 1.6 : 1.4 },
   });
   const anuncios = analisarAnuncios(body, valoracao?._debug?.valor);
   if (anuncios && anuncios.limite && valoracao && valoracao._debug && valoracao._debug.valor > anuncios.limite) {
@@ -256,6 +258,15 @@ async function gerarEstudoCasaFromDB({ pool, assets, out, ...body }) {
   } else if (body.ponto) {
     // modo raio geográfico (pós-backfill): body.ponto = 'SRID=4326;POINT(lng lat)'
     comps = await fetchCompsByRadius(pool, body.ponto, { raioMetros: body.raioMetros, janelaMeses: body.janelaMeses });
+    // 14/11: venda anterior do PRÓPRIO imóvel (até 10 anos) entra como referência forte
+    try {
+      const propria = await fetchVendaPropria(pool, body.ponto, body.numero, body.area_terreno);
+      if (propria) {
+        const dia = d => String(d instanceof Date ? d.toISOString() : d).slice(0, 10);
+        const igual = comps.find(c => dia(c.data) === dia(propria.data) && Number(c.valor) === Number(propria.valor));
+        if (igual) igual.propria = true; else comps.push(propria);
+      }
+    } catch (e) { console.warn("venda própria:", e.message); }
   } else {
     if (!body.rua || body.numero == null) throw new Error("rua e numero são obrigatórios (modo rua+número)");
     comps = await fetchCompsByStreet(pool, body.rua, body.numero, { raio: body.raio, janelaMeses: body.janelaMeses });
