@@ -108,6 +108,47 @@ function montarImovel(body) {
   };
 }
 
+// 14/11 · anúncios à venda informados pelo corretor (links do site expandidos no n8n).
+// Preço PEDIDO não entra na conta das vendas; serve de alerta. Só limita o valor recomendado quando
+// o anúncio é parecido E informa o lote (dá para comparar casa com casa).
+function analisarAnuncios(body, valorMercado) {
+  const brutos = Array.isArray(body.anuncios) ? body.anuncios : [];
+  const ac = Number(body.area_construida) || 0, lt = Number(body.area_terreno) || 0;
+  const lista = brutos.map(a => ({
+    titulo: a.titulo || a.codigo || "anúncio", codigo: a.codigo || "", url: a.url || "",
+    valor: Number(a.valor) || 0, area_construida: Number(a.area_construida) || 0,
+    area_terreno: Number(a.area_terreno) || 0, quartos: a.quartos != null ? Number(a.quartos) : null,
+    idade: a.idade != null && a.idade !== "" ? Number(a.idade) : null,
+  })).filter(a => a.valor > 0);
+  if (!lista.length) return null;
+  const constr = ac ? [Math.round(ac * 0.7), Math.round(ac * 1.45)] : null;
+  const lote = lt ? [Math.round(lt * 0.75), Math.round(lt * 1.3)] : null;
+  for (const a of lista) {
+    const okC = constr && a.area_construida && a.area_construida >= constr[0] && a.area_construida <= constr[1];
+    const okL = !a.area_terreno || !lote || (a.area_terreno >= lote[0] && a.area_terreno <= lote[1]);
+    a.parecida = !!(okC && okL);
+    a.lote_conhecido = !!(a.area_terreno && lote);
+  }
+  const par = lista.filter(a => a.parecida);
+  const menor = par.length ? Math.min(...par.map(a => a.valor)) : null;
+  const comLote = par.filter(a => a.lote_conhecido);
+  const tetoLote = comLote.length ? Math.min(...comLote.map(a => a.valor)) : null;
+  const mi = v => "R$ " + (v / 1e6).toFixed(2).replace(/\.?0+$/, "").replace(".", ",") + " mi";
+  let mensagem = "", limite = null;
+  if (valorMercado > 0 && menor != null) {
+    const abaixo = par.filter(a => a.valor < valorMercado).length;
+    if (tetoLote != null && tetoLote < valorMercado) {
+      limite = tetoLote;
+      mensagem = `Uma casa parecida, com lote parecido, pede ${mi(tetoLote)}. O valor de mercado do estudo foi limitado a esse pedido.`;
+    } else if (abaixo) {
+      mensagem = `${abaixo} de ${par.length} parecida${par.length > 1 ? "s" : ""} pede${abaixo > 1 ? "m" : ""} menos que o valor de mercado do estudo (${mi(valorMercado)}). O comprador vai comparar: veja idade, estado e lote antes de fixar o preço.`;
+    } else {
+      mensagem = `Todas as parecidas pedem mais que o valor de mercado do estudo (${mi(valorMercado)}): o preço fica competitivo na vitrine.`;
+    }
+  }
+  return { lista, constr, lote, parecidas_n: par.length, menor_parecida: menor, limite, mensagem };
+}
+
 // núcleo: recebe comps já buscados + dados do imóvel -> PPTX
 async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
   const imovel = montarImovel(body);
@@ -118,6 +159,11 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     ref: body.ref || body.estudo_data,
     opts: { cub },
   });
+  const anuncios = analisarAnuncios(body, valoracao?._debug?.valor);
+  if (anuncios && anuncios.limite && valoracao && valoracao._debug && valoracao._debug.valor > anuncios.limite) {
+    valoracao.valor_mercado = "R$ " + (anuncios.limite / 1e6).toFixed(2).replace(".", ",") + " milhões";
+    valoracao.valor_mercado_limitado = true;
+  }
   // decisão no tempo (passo E) — piso da faixa (p25) como valor competitivo de venda rápida.
   // Casa de rua: sem condomínio por padrão (aceita body.condominio_mensal se houver, ex. vila fechada).
   const decisao_tempo = buildDecisaoTempo({
@@ -138,7 +184,8 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
   // dava cenários "otimistas" ABAIXO do valor de mercado (ex.: Lomas Valentinas 305: 1,47 mi < 1,53 mi).
   if (decisao_tempo && decisao_tempo.aplicavel !== false && decisao_tempo._debug) {
     const arred = v => Math.round(v / passoPara(v)) * passoPara(v);
-    const vm = valoracao?._debug?.valor, vt = valoracao?._debug?.teto;
+    let vm = valoracao?._debug?.valor; const vt = valoracao?._debug?.teto;
+    if (anuncios && anuncios.limite && vm > anuncios.limite) vm = anuncios.limite;   // 14/11: só com lote dos dois conhecido
     if (vm > 0) decisao_tempo._debug.valor_intermediario = arred(vm);
     if (vt > 0) decisao_tempo._debug.valor_superotimista = arred(vt);
     // 14/11: raridade de cada preço entre as casas parecidas vendidas (valores de hoje)
@@ -163,6 +210,7 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     unidade_regioes: body.unidade_regioes,
     unidade_texto: body.unidade_texto,
     ressalvas: body.ressalvas,
+    anuncios,
   }, { assets, out });
 }
 
@@ -186,4 +234,4 @@ async function gerarEstudoCasaFromDB({ pool, assets, out, ...body }) {
   return gerarEstudoCasa({ comps, body, assets, out, pool });
 }
 
-module.exports = { gerarEstudoCasa, gerarEstudoCasaFromDB, formatComps, montarImovel };
+module.exports = { gerarEstudoCasa, gerarEstudoCasaFromDB, formatComps, montarImovel, analisarAnuncios };
