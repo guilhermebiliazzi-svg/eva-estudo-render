@@ -66,12 +66,24 @@ function chaveVendido(v) {
 }
 
 // aplica a lista de exclusão do corretor (case-insensitive; espaços internos normalizados)
+// 14/11 · a EVA às vezes reescreve a unidade da chave ("APT 81" no lugar de "AP 81 VG", caso
+// Rio Negro): a chave exata não bate e a curadoria era ignorada. Casa também pela DATA + os
+// NÚMEROS da unidade (ordenados), que não mudam com a grafia.
+function casadorChaves(lista) {
+  const norm = s => String(s).trim().toUpperCase().replace(/\s+/g, " ");
+  const solta = k => { const [d, u = ""] = norm(k).split("|"); const ns = (u.match(/\d+/g) || []).map(Number).sort((a, b) => a - b);
+    return ns.length ? `${d}|${ns.join("-")}` : null; };
+  const exatas = new Set(lista.map(norm).filter(Boolean));
+  const soltas = new Set(lista.map(solta).filter(Boolean));
+  return r => { const k = chaveVendido(r); if (exatas.has(norm(k))) return true; const sk = solta(k); return !!(sk && soltas.has(sk)); };
+}
+
 function excluirVendidos(rows, excluir) {
   if (!Array.isArray(rows) || !rows.length) return rows || [];
   if (!Array.isArray(excluir) || !excluir.length) return rows;
   const norm = s => String(s).trim().toUpperCase().replace(/\s+/g, " ");
-  const set = new Set(excluir.map(norm).filter(Boolean));
-  const kept = rows.filter(r => !set.has(norm(chaveVendido(r))));
+  const casa = casadorChaves(excluir);
+  const kept = rows.filter(r => !casa(r));
   // se a âncora do SQL foi excluída, promove a venda "apto" mais recente restante
   if (kept.length && !kept.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1)) {
     const ehVaga = r => r.is_vaga === true || /^(VG|VAGA|BOX)\b/i.test(String(r.unidade || "").trim()) || Number(r.area_m2) < 30;
@@ -93,17 +105,17 @@ function manterVendidos(rows, manter) {
   if (!Array.isArray(rows) || !rows.length) return rows || [];
   if (!Array.isArray(manter) || !manter.length) return rows;   // [] = sem curadoria → tudo
   const norm = s => String(s).trim().toUpperCase().replace(/\s+/g, " ");
-  const set = new Set(manter.map(norm).filter(Boolean));
+  const casa = casadorChaves(manter);
   // v3.8 · mesmo critério de vaga do itbi_format (prefixo ampliado + área <15 m²), e a vaga
   // acompanha a venda mantida se foi lançada em até 5 dias de distância (guia paga depois).
   const ehVaga = r => r.is_vaga === true || /^(VG|VAGA|BOX|GAR|GARAGEM|ESTACION)/i.test(String(r.unidade || "").trim()) ||
     (Number(r.area_m2) > 0 && Number(r.area_m2) < 15);
   const diaDe = r => { const [dd, mm, yy] = norm(chaveVendido(r)).split("|")[0].split("/");
     return Math.floor(Date.UTC(+yy, +mm - 1, +dd) / 86400000); };
-  const aprovadas = rows.filter(r => set.has(norm(chaveVendido(r))));
+  const aprovadas = rows.filter(casa);
   const diasOk = aprovadas.map(diaDe);
   const pertoDeMantida = r => { const d = diaDe(r); return diasOk.some(x => Math.abs(x - d) <= 5); };
-  const kept = rows.filter(r => set.has(norm(chaveVendido(r))) || (ehVaga(r) && pertoDeMantida(r)));
+  const kept = rows.filter(r => casa(r) || (ehVaga(r) && pertoDeMantida(r)));
   if (!kept.length) return rows;                                // chaves não bateram → não zera o estudo
   // âncora do SQL pode ter ficado de fora → promove a venda "apto" mais recente mantida
   if (!kept.some(r => r.is_ancora === true || r.is_ancora === "t" || r.is_ancora === 1)) {
