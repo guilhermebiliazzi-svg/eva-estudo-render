@@ -331,7 +331,8 @@ function buildEstudoCasa(data, opts={}){
     const nMi = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
     const faixaMi = (a,b) => `R$ ${nMi(a)} a ${nMi(b)} mi`;
     const capP = t => String(t||"").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
-    const mesAno = d => { const m = String(d||"").match(/(\d{4})-(\d{2})/); const M=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]; return m ? `${M[+m[2]-1]}/${m[1].slice(2)}` : String(d||""); };
+    // o banco devolve a data como Date (no teste local vinha texto)
+    const mesAno = d => { const m = (d instanceof Date ? d.toISOString() : String(d||"")).match(/(\d{4})-(\d{2})/); const M=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]; return m ? `${M[+m[2]-1]}/${m[1].slice(2)}` : String(d||""); };
     const chave = x => [x.data,x.logradouro,x.numero,x.valor].join("|");
     const mp = PAR.mais_parecida;
     s.addText(`Lote de ${milharP(PAR.lote[0])} a ${milharP(PAR.lote[1])} m² e casa de ${milharP(PAR.constr[0])} a ${milharP(PAR.constr[1])} m², vendidas nos últimos 3 anos · preço efetivamente pago (ITBI)`,
