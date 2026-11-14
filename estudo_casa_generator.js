@@ -287,6 +287,7 @@ function buildEstudoCasa(data, opts={}){
     if (lista.length > 6) {
       const keep = new Set([0,1, lista.length-1, lista.length-2].map(i => chave(lista[i])));
       if (mp) keep.add(chave(mp));
+      lista.filter(x => x.propria).forEach(x => keep.add(chave(x)));   // 14/11: a venda deste imóvel sempre aparece
       const meio = lista.filter(x => !keep.has(chave(x)));
       while (keep.size < 6 && meio.length) keep.add(chave(meio.shift()));
       lista = lista.filter(x => keep.has(chave(x)));
@@ -295,9 +296,9 @@ function buildEstudoCasa(data, opts={}){
     const cellP=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:8.5,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic,hyperlink:o.hyperlink,underline:o.underline}});
     const rowsP = lista.map(x => {
       const eMp = mp && chave(x) === chave(mp);
-      const f = eMp ? {color:ICETINT} : undefined;
+      const f = x.propria ? {color:REDTINT} : eMp ? {color:ICETINT} : undefined;
       return [
-        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? " ★" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
+        cellP(x.propria ? `Este imóvel (venda anterior)` : `${capP(x.logradouro)}, ${x.numero}${eMp ? " ★" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
         cellP(`${mil(x.area_terreno)} m²`,{fill:f}), cellP(`${mil(x.area_construida)} m²`,{fill:f}),
         cellP(x.ano_construcao ? String(x.ano_construcao).slice(0,4) : "—",{fill:f}),
         cellP(mesAno(x.data),{fill:f}),
@@ -349,7 +350,7 @@ function buildEstudoCasa(data, opts={}){
     pontaTxt(RG.min, "menor R$/m²", "left", MX);
     pontaTxt(RG.max, "maior R$/m²", "right", MX + 8.9 - 2.9);
     const nFora = PAR.lista.filter(x => !x.na_conta).length;
-    s.addText(`${RG.n_total} vendas na região · ${RG.n_final} consideradas (descartadas: ${RG.desc_lote} por lote muito diferente e ${RG.desc_curva} com valor fora da curva). Valores de hoje = preço pago corrigido pelo IPCA.${nFora ? ` "Fora da curva" aparece na lista, mas não entra no cálculo.` : ""} ★ = a mais parecida.`,
+    s.addText(`${RG.n_total} vendas na região · ${RG.n_final} consideradas (descartadas: ${RG.desc_lote} por lote muito diferente e ${RG.desc_curva} com valor fora da curva). Valores de hoje = preço pago corrigido pelo IPCA.${val.pondera_distancia ? " As vendas mais próximas pesam mais." : ""}${nFora ? ` "Fora da curva" aparece na lista, mas não entra no cálculo.` : ""} ★ = a mais parecida.`,
       {x:MX,y:by+0.32,w:8.9,h:0.3,fontFace:BODY,fontSize:7.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.0});
     footer(s,9);
   }
@@ -472,6 +473,7 @@ function buildEstudoCasa(data, opts={}){
     if (lista.length > 9) {
       const keep = new Set([0,1,2, lista.length-1, lista.length-2].map(i => chave(lista[i])));
       if (mp) keep.add(chave(mp));
+      lista.filter(x => x.propria).forEach(x => keep.add(chave(x)));
       const meio = lista.filter(x => !keep.has(chave(x)));
       while (keep.size < 9 && meio.length) keep.add(chave(meio.shift()));
       lista = lista.filter(x => keep.has(chave(x)));
@@ -484,9 +486,9 @@ function buildEstudoCasa(data, opts={}){
       : (x.logradouro ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${x.logradouro}, ${x.numero || ""}, São Paulo - SP`) : null);
     const rowsP = lista.map(x => {
       const eMp = mp && chave(x) === chave(mp);
-      const f = eMp ? {color:ICETINT} : undefined;
+      const f = x.propria ? {color:REDTINT} : eMp ? {color:ICETINT} : undefined;
       return [
-        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? "  ★ mais parecida" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
+        cellP(x.propria ? `Este imóvel (venda anterior)` : `${capP(x.logradouro)}, ${x.numero}${eMp ? "  ★ mais parecida" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
         cellP(`${milharP(x.area_terreno)} m²`,{fill:f}), cellP(`${milharP(x.area_construida)} m²`,{fill:f}),
         cellP(x.ano_construcao ? String(x.ano_construcao).slice(0,4) : "—",{fill:f}),
         cellP(mesAno(x.data),{fill:f}),
@@ -672,7 +674,8 @@ function buildEstudoCasa(data, opts={}){
       {text:val.rs_m2_terreno_alvo||"",options:{fontSize:30,color:WHITE,bold:true,breakLine:true}},
       {text:`× ${val.area_terreno?val.area_terreno+" m² de terreno":"área do lote"}`,options:{fontSize:11,color:ICE}}],
       {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-    s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
+    const apoio = val.conclusao_apoio||"";
+    s.addText(apoio,{x:6.5,y:3.45,w:2.95,h:1.55,fontFace:BODY,fontSize:apoio.length>230?10:apoio.length>170?11:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.15});
     footer(s,13+OFF,true);
   }
 
