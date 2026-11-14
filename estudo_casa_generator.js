@@ -396,10 +396,13 @@ function buildEstudoCasa(data, opts={}){
     const mil = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     const nMiA = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
     const miA = v => v >= 995e3 ? "R$ " + nMiA(v) + " mi" : "R$ " + Math.round(v/1e3) + " mil";
-    const lista = AN.lista.slice().sort((a,b) => (b.parecida?1:0)-(a.parecida?1:0) || a.valor-b.valor).slice(0, 6*AN_SLIDES);
+    // 14/11: sem selo de "parecida" nos cartões — ordem por preço (com mais de 12, as de tamanho parecido entram primeiro)
+    const lista = (AN.lista.length > 12
+      ? AN.lista.slice().sort((a,b) => (b.parecida?1:0)-(a.parecida?1:0) || a.valor-b.valor).slice(0, 12)
+      : AN.lista.slice()).sort((a,b) => a.valor-b.valor);
     const pedidos = AN.lista.map(a => a.valor).sort((a,b)=>a-b);
     const resumo = `${AN.lista.length} ANÚNCIO${AN.lista.length>1?"S":""} · pedidos de R$ ${nMiA(pedidos[0])} a ${nMiA(pedidos[pedidos.length-1])} mi`
-      + (AN.parecidas_n ? ` · ★ ${AN.parecidas_n} parecida${AN.parecidas_n>1?"s":""} com a sua (casa de ${mil(AN.constr[0])} a ${mil(AN.constr[1])} m²) · menor pedido: ${miA(AN.menor_parecida)}` : "");
+      + (AN.parecidas_n ? ` · ${AN.parecidas_n} com casa de ${mil(AN.constr[0])} a ${mil(AN.constr[1])} m² (tamanho da sua) · menor pedido entre elas: ${miA(AN.menor_parecida)}` : "");
     const CW = (8.9 - 2*0.15)/3, CH = 1.45, FW = 1.22, Y0 = 1.9, GAP = 0.1;
     for (let k = 0; k < AN_SLIDES; k++) {
       const s=p.addSlide(); s.background={color:WHITE};
@@ -408,7 +411,7 @@ function buildEstudoCasa(data, opts={}){
       s.addText(resumo,{x:MX+0.15,y:1.46,w:8.6,h:0.34,fontFace:BODY,fontSize:resumo.length>120?8.5:9.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
       lista.slice(k*6, k*6+6).forEach((a, idx) => {
         const x = MX + (idx%3)*(CW+0.15), y = Y0 + Math.floor(idx/3)*(CH+GAP);
-        s.addShape(p.shapes.RECTANGLE,{x,y,w:CW,h:CH,fill:{color:a.parecida?ICETINT:WHITE},line:{color:a.parecida?NAVY:LINE,width:a.parecida?1.25:0.75},shadow:SH()});
+        s.addShape(p.shapes.RECTANGLE,{x,y,w:CW,h:CH,fill:{color:WHITE},line:{color:LINE,width:0.75},shadow:SH()});
         if (a.foto) {
           const iw = a.foto_w || 4, ih = a.foto_h || 3, r = iw/ih, bx = FW/CH;
           s.addImage({data:a.foto,x,y,w:r>bx?CH*r:FW,h:r>bx?CH:FW/r,sizing:{type:"cover",w:FW,h:CH},
@@ -424,7 +427,7 @@ function buildEstudoCasa(data, opts={}){
           {text:tipoQ,options:{fontSize:8.5,color:MUTED,breakLine:true}},
           {text:`Casa ${a.area_construida?mil(a.area_construida)+" m²":"—"} · lote ${a.area_terreno?mil(a.area_terreno)+" m²":"—"}`,options:{fontSize:9,color:INK,breakLine:true}},
           {text:`${a.idade!=null?a.idade+" anos":"idade —"}${a.area_construida?" · R$ "+mil(a.valor/a.area_construida)+"/m²":""}`,options:{fontSize:9,color:INK,breakLine:true}},
-          {text:a.parecida?"★ PARECIDA COM A SUA":" ",options:{fontSize:7.5,bold:true,color:RED,charSpacing:0.5,breakLine:true}},
+          {text:" ",options:{fontSize:6,breakLine:true}},
           ...(a.url?[{text:`ver anúncio ${a.codigo||""} ›`,options:{fontSize:8,color:LINK,underline:true,hyperlink:{url:a.url,tooltip:"Abrir anúncio"}}}]:[]),
         ],{x:tx,y:y+0.08,w:tw,h:CH-0.16,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
       });
