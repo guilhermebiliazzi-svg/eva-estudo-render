@@ -19,6 +19,8 @@ const pptxgen = require("pptxgenjs");
 const { vendidosAggregatedFromRows } = require("./itbi_format");
 const { areaIdentica, tolArea } = require("./valoracao");
 const { addDecisaoTempoSlides } = require("./decisao_tempo_slide");
+// 14/11: fotos de exemplo do slide "Fotos e vídeo profissionais" (base64; sem o arquivo, o slide não entra)
+let FOTOS_TRAB = []; try { FOTOS_TRAB = require("./fotos_trabalho").FOTOS || []; } catch (e) { FOTOS_TRAB = []; }
 
 // v4 · identidade REMAX 2026 (Guia de Execução e Liderança de Marca) — cores/fonte em brand.js
 const { C:B, FONT, TAN, marca, barra, tresBarras } = require("./brand");
@@ -45,7 +47,11 @@ function buildEstudo(data, opts={}){
 
   // ---------- helpers ----------
   const SH=()=>({type:"outer",color:"000000",blur:9,offset:3,angle:135,opacity:0.13});
+  // 14/11: com o slide de fotos, as seções a partir da 05 sobem 1 ("=05 · ..." = número fixo)
+  const FOTO = FOTOS_TRAB.length ? 1 : 0;
   function eyebrow(s,txt,x=MX,y=0.42,color=RED){
+    if (txt[0] === "=") txt = txt.slice(1);
+    else txt = txt.replace(/^(\d{2}) · /, (m, n) => (+n >= 5 ? String(+n + FOTO).padStart(2, "0") : n) + " · ");
     barra(p,s,{x:x,y:y-0.03,h:0.22,w:0.075,color:RED});
     s.addText(txt.toUpperCase(),{x:x+0.27,y:y-0.05,w:7,h:0.28,fontFace:BODY,fontSize:11,
       color:color,bold:true,charSpacing:3,align:"left",valign:"middle",margin:0});
@@ -59,7 +65,8 @@ function buildEstudo(data, opts={}){
     s.addText(txt,{x:MX,y:y,w:8.9,h:0.72,fontFace:HEAD,fontSize:size,color:color,
       bold:true,align:"left",valign:"middle",margin:0});
   }
-  function footer(s,n,dark=false){
+  function footer(s,n,dark=false,fixo=false){
+    if (!fixo && n >= 6) n += FOTO;   // 14/11: páginas depois do slide de fotos
     const c = dark ? B.NAVYMUTED : MUTED;
     s.addText(marca(data.corretor?.unidade||"REMAX Ville")+" · Estudo de Mercado",
       {x:MX,y:5.28,w:5,h:0.25,fontFace:BODY,fontSize:8.5,color:c,align:"left",valign:"middle",margin:0});
@@ -187,6 +194,34 @@ function buildEstudo(data, opts={}){
     footer(s,5);
   }
 
+  // ===== 14/11 · FOTOS E VÍDEO PROFISSIONAIS (institucional; só entra se houver fotos_trabalho.js) =====
+  if (FOTO) { const s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"=05 · Produção"); title(s,"Fotos e vídeo profissionais");
+    const itens=[["Fotógrafo profissional","Fotos em alta resolução, com luz, ângulo e enquadramento que valorizam cada ambiente."],
+      ["Vídeo do imóvel","Tour em vídeo para os portais e as redes sociais: o comprador conhece o imóvel antes da visita."],
+      ["A primeira impressão vende","O anúncio é a vitrine. Boas fotos geram mais cliques, mais visitas e propostas melhores."]];
+    itens.forEach((t,i)=>{ const y=1.62+i*1.0;
+      s.addShape(p.shapes.OVAL,{x:MX,y:y+0.02,w:0.36,h:0.36,fill:{color:NAVY},line:{type:"none"}});
+      s.addText(String(i+1),{x:MX,y:y+0.02,w:0.36,h:0.36,fontFace:HEAD,fontSize:12,color:WHITE,bold:true,align:"center",valign:"middle",margin:0});
+      s.addText([{text:t[0],options:{fontSize:13,bold:true,color:NAVY,breakLine:true}},{text:t[1],options:{fontSize:10,color:INK}}],
+        {x:MX+0.5,y:y,w:2.75,h:0.92,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.08});
+    });
+    // colagem: 1 grande (4:3) + 2 menores empilhadas
+    const F = FOTOS_TRAB, gx=3.95, gy=1.6, bw=3.6, bh=2.7, sw=1.78, sh=(bh-0.08)/2;
+    const foto=(d,x,y,w,h)=>s.addImage({data:d,x,y,w:Math.max(w,h*4/3),h:Math.max(h,w*3/4),sizing:{type:"cover",w,h}});
+    foto(F[0],gx,gy,bw,bh);
+    if (F[1]) foto(F[1],gx+bw+0.07,gy,sw,sh);
+    if (F[2]) foto(F[2],gx+bw+0.07,gy+sh+0.08,sw,sh);
+    s.addShape(p.shapes.ROUNDED_RECTANGLE,{x:gx+0.15,y:gy+bh-0.5,w:1.4,h:0.34,fill:{color:NAVY,transparency:15},line:{type:"none"},rectRadius:0.06});
+    s.addShape(p.shapes.ISOSCELES_TRIANGLE,{x:gx+0.27,y:gy+bh-0.42,w:0.18,h:0.18,rotate:90,fill:{color:WHITE},line:{type:"none"}});
+    s.addText("fotos + vídeo",{x:gx+0.5,y:gy+bh-0.5,w:1.0,h:0.34,fontFace:BODY,fontSize:9.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+    s.addText("Exemplo real: anúncio da REMAX Ville na Vila Nova Conceição",{x:gx,y:gy+bh+0.06,w:5.5,h:0.22,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    s.addShape(p.shapes.RECTANGLE,{x:MX,y:4.62,w:8.9,h:0.5,fill:{color:NAVY},line:{type:"none"}});
+    s.addText("Todo imóvel que representamos ganha produção profissional de fotos e vídeo antes de ir para os portais.",
+      {x:MX+0.2,y:4.62,w:8.5,h:0.5,fontFace:BODY,fontSize:11.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+    footer(s,6,false,true);
+  }
+
   // ===== SLIDE 6 — DIVULGAÇÃO (institucional) =====
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"05 · Divulgação"); title(s,"Onde seu imóvel aparece");
@@ -219,19 +254,19 @@ function buildEstudo(data, opts={}){
     const steps=[["1","Vendidos no mesmo prédio","Transações reais de ITBI do próprio condomínio — só unidades de área idêntica à avaliada ancoram o valor."],
       ["2","Ajuste no tempo + depreciação","Âncora na venda recente, com correção monetária e depreciação."],
       ["3","Comparáveis ativos","Anúncios atuais semelhantes calibram o preço de pedido."]];
-    const cw=2.85, gap=0.18, y0=1.8, ch=1.75;
+    const cw=2.85, gap=0.18, y0=1.75, ch=2.1;   // 14/11: caixa mais alta — o texto vazava em 3 linhas
     steps.forEach((c,i)=>{ const x=MX+i*(cw+gap);
       s.addShape(p.shapes.RECTANGLE,{x:x,y:y0,w:cw,h:ch,fill:{color:PAPER},line:{color:LINE,width:1},shadow:SH()});
-      s.addShape(p.shapes.OVAL,{x:x+0.25,y:y0+0.25,w:0.5,h:0.5,fill:{color:NAVY},line:{type:"none"}});
-      s.addText(c[0],{x:x+0.25,y:y0+0.25,w:0.5,h:0.5,fontFace:HEAD,fontSize:18,color:WHITE,bold:true,align:"center",valign:"middle",margin:0});
-      s.addText(c[1],{x:x+0.25,y:y0+0.85,w:cw-0.5,h:0.5,fontFace:HEAD,fontSize:13.5,color:NAVY,bold:true,align:"left",valign:"top",margin:0});
-      s.addText(c[2],{x:x+0.25,y:y0+1.28,w:cw-0.5,h:0.42,fontFace:BODY,fontSize:10.5,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
+      s.addShape(p.shapes.OVAL,{x:x+0.25,y:y0+0.2,w:0.45,h:0.45,fill:{color:NAVY},line:{type:"none"}});
+      s.addText(c[0],{x:x+0.25,y:y0+0.2,w:0.45,h:0.45,fontFace:HEAD,fontSize:16,color:WHITE,bold:true,align:"center",valign:"middle",margin:0});
+      s.addText(c[1],{x:x+0.25,y:y0+0.75,w:cw-0.5,h:0.5,fontFace:HEAD,fontSize:13,color:NAVY,bold:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:0.95});
+      s.addText(c[2],{x:x+0.25,y:y0+1.3,w:cw-0.5,h:0.75,fontFace:BODY,fontSize:10.5,color:INK,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     });
-    s.addText("FONTES",{x:MX,y:3.85,w:3,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
+    s.addText("FONTES",{x:MX,y:4.0,w:3,h:0.3,fontFace:BODY,fontSize:10.5,color:RED,bold:true,charSpacing:2,margin:0,valign:"middle"});
     const fontes=[["Portais + NonStop","anúncios ativos comparáveis"],["ITBI — Prefeitura de SP","transações efetivamente fechadas"],["IBGE — IPCA","correção monetária no tempo"]];
     fontes.forEach((f,i)=>{ const x=MX+i*(cw+gap);
       s.addText([{text:f[0],options:{bold:true,color:NAVY,fontSize:12,breakLine:true}},{text:f[1],options:{color:MUTED,fontSize:10.5}}],
-        {x:x,y:4.2,w:cw,h:0.7,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+        {x:x,y:4.32,w:cw,h:0.7,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
     });
     footer(s,7);
   }
@@ -628,7 +663,7 @@ function buildEstudo(data, opts={}){
   }
 
   // ===== DECISÃO NO TEMPO (após a Conclusão, no fim da apresentação) =====
-  addDecisaoTempoSlides(p, data, { num: 12, footerStart: 14 });
+  addDecisaoTempoSlides(p, data, { num: 12 + FOTO, footerStart: 14 + FOTO });
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
