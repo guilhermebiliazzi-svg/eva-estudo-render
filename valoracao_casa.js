@@ -139,6 +139,10 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   // PRÓPRIO imóvel (mesmo lote) entra com peso `pesoPropria` e nunca é cortada.
   const distEscala    = opts.distEscala    ?? 0;     // 0 = sem peso por distância (modo rua / condomínio)
   const pesoPropria   = opts.pesoPropria   ?? 3;
+  // 14/11 · peso pelo TEMPO: a venda mais recente pesa mais (metade do peso a cada `meiaVidaMeses`).
+  // O IPCA corrige a inflação, mas não a valorização real do bairro; por isso o recente manda mais.
+  const meiaVidaMeses = opts.meiaVidaMeses ?? 0;     // 0 = sem peso por tempo
+  const decaiPropria  = opts.decaiPropria  ?? false; // a venda do próprio imóvel também perde peso com o tempo?
 
   const hoje   = new Date();
   const r      = ref ? parseDataBR(ref) : null;
@@ -172,7 +176,11 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
     const rs         = valTerreno / terreno;
 
     const dist = Number(c.dist);
-    const w = c.propria ? pesoPropria : (distEscala > 0 && Number.isFinite(dist) ? 1 / (1 + Math.pow(dist / distEscala, 2)) : 1);
+    const dc = parseDataBR(c.data);
+    const meses = Number.isFinite(dc.ano) && Number.isFinite(dc.mes) ? Math.max(0, (anoRef - dc.ano) * 12 + (mesRef - dc.mes)) : NaN;
+    const wTempo = meiaVidaMeses > 0 && Number.isFinite(meses) ? Math.pow(0.5, meses / meiaVidaMeses) : 1;
+    const w = c.propria ? pesoPropria * (decaiPropria ? wTempo : 1)
+                        : (distEscala > 0 && Number.isFinite(dist) ? 1 / (1 + Math.pow(dist / distEscala, 2)) : 1) * wTempo;
     todos.push({ ...c, valor: valorOrig, valor_corr: valorCorr, terreno, rs_num: rs, w });
   }
   if (!todos.length) {
@@ -297,10 +305,13 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
     n_comps:            rsLimpo.length,
     conclusao_apoio:    `Valor = terreno (${milhoes(valorTerreno)}) + construção depreciada (${reais(valConstrAval)}). `
                       + `Terreno pela mediana de ${rsLimpo.length} casas vendidas (ITBI), corrigida pelo IPCA`
-                      + (distEscala > 0 ? ", com mais peso para as mais próximas" : "")
+                      + (distEscala > 0 && meiaVidaMeses > 0 ? ", com mais peso para as mais próximas e mais recentes"
+                         : distEscala > 0 ? ", com mais peso para as mais próximas"
+                         : meiaVidaMeses > 0 ? ", com mais peso para as mais recentes" : "")
                       + (propria ? `. Este imóvel foi vendido em ${mesAnoTxt(propria.data)} por ${milhoes(propria.valor)} (${milhoes(propria.valor_corr)} hoje).` : "."),
     venda_propria: propria ? { data: propria.data, valor: Math.round(propria.valor), valor_corr: Math.round(propria.valor_corr) } : null,
     pondera_distancia: distEscala > 0,
+    pondera_tempo: meiaVidaMeses > 0,
     // comps enriquecidos p/ a tabela (orchestrator pode usar estes no lugar dos crus)
     comps: enriched,
     regua,
