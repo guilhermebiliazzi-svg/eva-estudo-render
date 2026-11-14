@@ -49,6 +49,9 @@ function buildEstudo(data, opts={}){
   const SH=()=>({type:"outer",color:"000000",blur:9,offset:3,angle:135,opacity:0.13});
   // 14/11: com o slide de fotos, as seções a partir da 05 sobem 1 ("=05 · ..." = número fixo)
   const FOTO = FOTOS_TRAB.length ? 1 : 0;
+  // 14/11: comparáveis em cartões com foto — 6 por slide, até 2 slides
+  const AMO_N = (data.amostras||[]).filter(a => a && (a.tipo==="avaliando" || a.link || a.nome)).length;
+  const AMO_SL = AMO_N > 6 ? 2 : 1, AMO_EXTRA = AMO_SL - 1;
   function eyebrow(s,txt,x=MX,y=0.42,color=RED){
     if (txt[0] === "=") txt = txt.slice(1);
     else txt = txt.replace(/^(\d{2}) · /, (m, n) => (+n >= 5 ? String(+n + FOTO).padStart(2, "0") : n) + " · ");
@@ -67,6 +70,7 @@ function buildEstudo(data, opts={}){
   }
   function footer(s,n,dark=false,fixo=false){
     if (!fixo && n >= 6) n += FOTO;   // 14/11: páginas depois do slide de fotos
+    if (!fixo && n >= 10 + FOTO) n += AMO_EXTRA;   // 14/11: 2º slide de comparáveis (mais de 6 anúncios)
     const c = dark ? B.NAVYMUTED : MUTED;
     s.addText(marca(data.corretor?.unidade||"REMAX Ville")+" · Estudo de Mercado",
       {x:MX,y:5.28,w:5,h:0.25,fontFace:BODY,fontSize:8.5,color:c,align:"left",valign:"middle",margin:0});
@@ -299,13 +303,8 @@ function buildEstudo(data, opts={}){
   }
 
   // ===== SLIDE 9 — AMOSTRAS (PEDIDO) — data-driven =====
-  { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"08 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
-    const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:11,align:"center",valign:"middle"}});
-    // v2: em imóvel comercial a coluna de suítes vira banheiros
-    const head=["Imóvel","Bairro","Área",(isComercial?"Banh.":"Suítes"),"Vagas","Pedido","R$/m²"].map(hdr);
-    const cell=(t,o={})=>({text:String(t),options:{fontSize:11,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,...o}});
-    const lk=(u)=>u?({hyperlink:{url:u,tooltip:"Abrir anúncio"},color:LINK,underline:true}):{};
+  // 14/11 · cartões com foto (mesmo layout do estudo de casa) no lugar da tabela: 6 por slide, até 2 slides
+  {
     const amostrasRaw = data.amostras||[];
     // v3 · saneamento: o "avaliando" pode chegar com pedido numérico cru e sem R$/m² —
     // formata dinheiro, calcula R$/m² quando possível e nunca imprime "undefined".
@@ -338,49 +337,71 @@ function buildEstudo(data, opts={}){
       if (out.area!=null && /^\s*\d+([.,]\d+)?\s*$/.test(String(out.area))) out.area = String(out.area)+" m²";
       return out;
     });
-    const nRows = amostras.length + 1; // + header
-    const fsA = nRows <= 7 ? 11 : 10;  // 8+ linhas: fonte menor pra não embrulhar
+    const ordem = a => a.tipo==="avaliando" ? 0 : a.tipo==="mesmo_predio" ? 1 : 2;
+    const lista = amostras.filter(a => a && (a.tipo==="avaliando" || a.link || a.nome))
+      .sort((a,b) => ordem(a)-ordem(b) || (money(a.pedido)||Infinity) - (money(b.pedido)||Infinity));
+    const exib = lista.slice(0, 12);
     const truncA = (t,n)=>{ t=String(t??""); return t.length>n ? t.slice(0,n-1).trimEnd()+"…" : t; };
-    const rows = amostras.map(a=>{
-      const fill = a.tipo==="avaliando" ? {color:ICETINT} : a.tipo==="mesmo_predio" ? {color:REDTINT} : undefined;
-      const boldName = a.tipo==="avaliando"||a.tipo==="mesmo_predio";
-      const nameOpts = {align:"left", bold:boldName, fontSize:fsA, ...(fill?{fill}:{}), ...(a.tipo!=="avaliando"?lk(a.link):{})};
-      const c=(t)=> cell(t, {fontSize:fsA, ...(fill?{fill}:{})});
-      return [cell(truncA(a.nome, 42),nameOpts),c(truncA(a.bairro, 24)),c(a.area),c(a.suites),c(a.vagas),
-        cell(a.pedido, {fontSize:fsA, ...(fill?{fill}:{}), bold:boldName}), c(a.valor_m2)];
-    });
-    // v3 · altura adaptativa: com muitas amostras a tabela encolhe em vez de invadir o rodapé
-    const rowHAd = nRows <= 6 ? 0.5 : nRows <= 8 ? 0.38 : 0.3;
-    s.addTable([head,...rows],{x:MX,y:1.75,w:8.9,colW:[2.5,1.45,0.9,0.75,0.75,1.35,1.2],
-      border:{type:"solid",color:LINE,pt:0.75},rowH:rowHAd,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
-    // v3.7 · a nota só entra se a tabela REAL couber: estima linhas embrulhadas por célula
-    // (nome ~30-34 chars/linha, bairro ~17-20) — antes a conta ignorava o wrap e a nota
-    // era impressa POR CIMA da última linha (caso Villa Solaia, 8 amostras).
-    const chN = fsA===11 ? 27 : 30, chB = fsA===11 ? 15 : 18;   // v4 · Arial é ~10% mais larga que a Calibri
-    const linhasReais = amostras.reduce((sum,a)=>{
-      const l = Math.max(1, Math.ceil(String(truncA(a.nome,42)).length/chN), Math.ceil(String(truncA(a.bairro,24)).length/chB));
-      return sum + Math.max(rowHAd, l*0.21 + 0.09);
-    }, 0);
-    const tabelaFim = 1.75 + rowHAd + linhasReais;
-    const mp = amostras.filter(a=>a.tipo==="mesmo_predio");
+    const comp = lista.filter(a => a.tipo !== "avaliando");
+    const pedidos = comp.map(a => money(a.pedido)).filter(v => v > 0).sort((a,b)=>a-b);
+    const resumo = comp.length
+      ? `${comp.length} ANÚNCIO${comp.length>1?"S":""} ATIVO${comp.length>1?"S":""}`
+        + (pedidos.length ? ` · pedidos de ${brl(pedidos[0])} a ${brl(pedidos[pedidos.length-1])}` : "")
+        + " · preço pedido não é valor fechado"
+      : "SEM ANÚNCIOS ATIVOS APROVADOS";
+    const mp = lista.filter(a=>a.tipo==="mesmo_predio");
     let nota;
-    if(mp.length){
-      const partes=[{text:"No mesmo condomínio à venda: ",options:{color:INK}}];
-      mp.forEach((a,i)=>{ partes.push({text:`${a.ref||a.nome} (${a.suites} ${isComercial?"banh.":"suítes"}) ${a.pedido}`,options:{bold:true,color:RED}});
-        if(i<mp.length-1) partes.push({text:" · ",options:{color:INK}}); });
-      partes.push({text:".   ",options:{color:INK}});
-      partes.push({text:"Azul",options:{color:LINK,bold:true}});
-      partes.push({text:" = link do anúncio.",options:{color:INK}});
-      nota=partes;
-    } else if (!amostras.some(a => a.tipo !== "avaliando")) {
-      // v3.9 · sem anúncio aprovado: diz isso em vez de deixar a tabela vazia sem explicação
-      nota=[{text:"Nenhum anúncio ativo de área similar foi aprovado para este estudo — o valor se apoia nas vendas reais do prédio (ITBI).",options:{color:INK,italic:true}}];
+    if (mp.length) {
+      nota=[{text:"Em vermelho: à venda no mesmo condomínio. ",options:{color:RED,bold:true}},
+            {text:"O valor de mercado deste estudo vem das vendas reais (ITBI).",options:{color:INK}}];
+    } else if (!comp.length) {
+      nota=null;
     } else {
-      nota=[{text:data.amostras_nota||"Comparáveis ativos do mesmo perfil.",options:{color:INK}}];
+      nota=[{text:(data.amostras_nota||"Anúncios ativos do mesmo perfil — calibram o preço de anúncio.")+(lista.length>12?`  Exibindo 12 de ${lista.length}.`:"")+" O valor de mercado vem das vendas reais (ITBI).",options:{color:INK}}];
     }
-    const notaY = Math.min(4.85, tabelaFim + 0.08);
-    if (tabelaFim <= 4.72) s.addText(nota,{x:MX,y:notaY,w:8.9,h:0.42,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0});
-    footer(s,9);
+    const CW = (8.9 - 2*0.15)/3, CH = 1.45, FW = 1.22, Y0 = 1.9, GAP = 0.1;
+    for (let k = 0; k < AMO_SL; k++) {
+      const s=p.addSlide(); s.background={color:WHITE};
+      eyebrow(s,"08 · Amostras"+(k?" (continuação)":"")); title(s,"Comparáveis ativos — preço pedido");
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.46,w:8.9,h:0.34,fill:{color:NAVY},line:{type:"none"}});
+      s.addText(resumo,{x:MX+0.15,y:1.46,w:8.6,h:0.34,fontFace:BODY,fontSize:resumo.length>110?8.5:9.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+      if (!comp.length && !exib.length) {
+        s.addShape(p.shapes.RECTANGLE,{x:MX,y:Y0,w:8.9,h:1.45,fill:{color:PAPER},line:{color:LINE,width:0.75}});
+        s.addText("Nenhum anúncio ativo de área similar foi aprovado para este estudo — o valor se apoia nas vendas reais do prédio (ITBI).",
+          {x:MX+0.3,y:Y0,w:8.3,h:1.45,fontFace:BODY,fontSize:12,color:INK,italic:true,align:"center",valign:"middle",margin:0});
+      }
+      exib.slice(k*6, k*6+6).forEach((a, idx) => {
+        const x = MX + (idx%3)*(CW+0.15), y = Y0 + Math.floor(idx/3)*(CH+GAP);
+        const fundo = a.tipo==="avaliando" ? ICETINT : a.tipo==="mesmo_predio" ? REDTINT : WHITE;
+        const link = a.tipo!=="avaliando" && a.link ? {hyperlink:{url:a.link,tooltip:"Abrir anúncio"}} : {};
+        s.addShape(p.shapes.RECTANGLE,{x,y,w:CW,h:CH,fill:{color:fundo},line:{color:a.tipo==="mesmo_predio"?RED:LINE,width:0.75},shadow:SH()});
+        if (a.foto) {
+          const iw = a.foto_w || 4, ih = a.foto_h || 3, r = iw/ih, bx = FW/CH;
+          s.addImage({data:a.foto,x,y,w:r>bx?CH*r:FW,h:r>bx?CH:FW/r,sizing:{type:"cover",w:FW,h:CH},...link});
+        } else {
+          s.addShape(p.shapes.RECTANGLE,{x,y,w:FW,h:CH,fill:{color:PAPER},line:{type:"none"}});
+          s.addText(a.tipo==="avaliando"?"seu imóvel":"sem foto",{x,y,w:FW,h:CH,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"center",valign:"middle",margin:0});
+        }
+        const tx = x + FW + 0.1, tw = CW - FW - 0.16;
+        // nome padrão da extração é "<bairro> <área>m²": aí basta o bairro (a área já vai na linha de baixo)
+        const nomeA = /\d+\s*m²$/.test(String(a.nome||"")) ? (a.bairro || a.nome) : (a.nome || a.bairro || "Anúncio");
+        const rot = a.tipo==="avaliando" ? "Seu imóvel (anúncio atual)" : a.tipo==="mesmo_predio" ? "Mesmo condomínio" : truncA(nomeA, 30);
+        const cod = (String(a.link||"").split(/[?#]/)[0].replace(/\/+$/,"").match(/-([A-Za-z0-9]{3,12})$/) || [])[1] || "";   // código no fim do link
+        const sv = isComercial ? "" : (a.suites ? `${a.suites} suíte${a.suites==="1"?"":"s"}` : "");
+        const vg = a.vagas ? `${a.vagas} vaga${a.vagas==="1"?"":"s"}` : "";
+        const linha = [a.area, sv, vg].filter(Boolean).join(" · ") || "—";
+        s.addText([
+          {text:String(a.pedido||"sob consulta"),options:{fontSize:14,bold:true,color:a.tipo==="mesmo_predio"?RED:NAVY,breakLine:true}},
+          {text:rot,options:{fontSize:8.5,color:a.tipo==="mesmo_predio"?RED:MUTED,bold:a.tipo!=="comparavel",breakLine:true}},
+          {text:linha,options:{fontSize:9,color:INK,breakLine:true}},
+          {text:(a.valor_m2 && a.valor_m2!=="—" ? "R$ "+a.valor_m2+"/m²" : "R$/m² —")+(a.bairro && a.tipo==="comparavel" && !String(rot).includes(a.bairro) ? " · "+truncA(a.bairro,16) : ""),options:{fontSize:9,color:INK,breakLine:true}},
+          {text:" ",options:{fontSize:6,breakLine:true}},
+          ...(a.tipo!=="avaliando" && a.link ? [{text:`ver anúncio${cod?" "+cod.toUpperCase():""} ›`,options:{fontSize:8,color:LINK,underline:true,hyperlink:{url:a.link,tooltip:"Abrir anúncio"}}}] : []),
+        ],{x:tx,y:y+0.08,w:tw,h:CH-0.16,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
+      });
+      if (nota && k === AMO_SL-1) s.addText(nota,{x:MX,y:4.92,w:8.9,h:0.3,fontFace:BODY,fontSize:9,align:"left",valign:"middle",margin:0});
+      footer(s, 9 + FOTO + k, false, true);
+    }
   }
 
   // ===== SLIDE 10 (MODO MERCADO) — cidade sem ITBI aberto =====
@@ -663,7 +684,7 @@ function buildEstudo(data, opts={}){
   }
 
   // ===== DECISÃO NO TEMPO (após a Conclusão, no fim da apresentação) =====
-  addDecisaoTempoSlides(p, data, { num: 12 + FOTO, footerStart: 14 + FOTO });
+  addDecisaoTempoSlides(p, data, { num: 12 + FOTO + AMO_EXTRA, footerStart: 14 + FOTO + AMO_EXTRA });
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
