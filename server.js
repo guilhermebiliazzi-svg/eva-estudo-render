@@ -515,6 +515,14 @@ app.post("/estudo", async (req, res) => {
             bairro: a.bairro, condominio: a.condominio_nome || "", endereco: a.address || "" }, a.link || "", subj)
         : a);
     }
+    // 14/11 · foto de capa de cada anúncio comparável (cartões do slide de comparáveis)
+    if (Array.isArray(body.amostras) && body.amostras.length) {
+      try {
+        const { anexarFotos } = require("./fotos_anuncios");
+        const n = await anexarFotos(body.amostras);
+        console.log(`/estudo: fotos em ${n} de ${body.amostras.length} amostras`);
+      } catch (e) { console.warn("/estudo: fotos das amostras:", e.message); }
+    }
     if (body.buildingKey) {
       if (!pool) throw new Error("DATABASE_URL não configurada para buscar vendidos pela buildingKey");
       await gerarEstudoFromDB({ pool, ...body, assets: ASSETS, out });
