@@ -325,7 +325,8 @@ function buildEstudoCasa(data, opts={}){
   const PAR = (val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
   // 14/11: anúncios informados (links do site/busca) ganham slide próprio, além das casas parecidas
   const AN = (data.anuncios && Array.isArray(data.anuncios.lista) && data.anuncios.lista.length) ? data.anuncios : null;
-  const OFF = (PAR && AN) ? 1 : 0;   // um slide a mais desloca a numeração dos seguintes
+  const AN_SLIDES = AN ? Math.ceil(Math.min(AN.lista.length, 12) / 6) : 0;   // 6 cartões por slide, até 2 slides
+  const OFF = (PAR || AN) ? (PAR ? 1 : 0) + AN_SLIDES - 1 : 0;   // slides a mais deslocam a numeração dos seguintes
   // 14/11 · sem anúncios informados, o slide 10 mostra as CASAS PARECIDAS vendidas (preço real pago)
   if (PAR) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Casas parecidas"); title(s,"Casas parecidas com a sua — vendas reais");
@@ -390,44 +391,46 @@ function buildEstudoCasa(data, opts={}){
       {x:MX,y:4.78,w:8.9,h:0.42,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
     footer(s,10);
   }
-  // ===== 14/11 · CASAS À VENDA AGORA (anúncios informados) =====
-  if (AN) { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,(PAR?"10":"09")+" · Concorrência"); title(s,"Casas à venda agora — preço pedido");
-    s.addText("Anúncios informados pelo corretor · preço pedido não é preço de venda",{x:MX,y:1.32,w:8.9,h:0.3,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+  // ===== 14/11 · CASAS À VENDA AGORA (anúncios informados) — cartões com foto, 6 por slide =====
+  if (AN) {
     const mil = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     const nMiA = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
     const miA = v => v >= 995e3 ? "R$ " + nMiA(v) + " mi" : "R$ " + Math.round(v/1e3) + " mil";
-    const lista = AN.lista.slice().sort((a,b) => (b.parecida?1:0)-(a.parecida?1:0) || a.valor-b.valor).slice(0,9);
-    const hdrN=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9.5,align:"center",valign:"middle"}});
-    const cellN=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:9,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic,hyperlink:o.hyperlink,underline:o.underline}});
-    const rowsN = lista.map(a => { const f = a.parecida ? {color:ICETINT} : undefined; return [
-      cellN(a.titulo || a.codigo || "anúncio",{align:"left",fill:f,...(a.url?{hyperlink:{url:a.url,tooltip:"Abrir anúncio"},color:LINK,underline:true}:{})}),
-      cellN(a.area_construida ? `${mil(a.area_construida)} m²` : "",{fill:f}),
-      cellN(a.area_terreno ? `${mil(a.area_terreno)} m²` : "",{fill:f}),
-      cellN(a.idade != null ? `${a.idade} anos` : "",{fill:f}),
-      cellN(miA(a.valor),{fill:f,bold:true}),
-      cellN(a.area_construida ? `R$ ${mil(a.valor/a.area_construida)}` : "",{fill:f}),
-      cellN(a.parecida ? "parecida" : " ",{fill:f,color:MUTED,italic:true}),
-    ]; });
-    s.addTable([["Anúncio","Casa","Lote","Idade","Pedido","R$/m² casa",""].map(hdrN), ...rowsN],{x:MX,y:1.68,w:6.1,colW:[2.15,0.62,0.62,0.6,0.72,0.74,0.65],
-      border:{type:"solid",color:LINE,pt:0.75},rowH:0.3,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
-    const cx=6.9, cw=2.55;
-    s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.68,w:cw,h:3.0,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    const lista = AN.lista.slice().sort((a,b) => (b.parecida?1:0)-(a.parecida?1:0) || a.valor-b.valor).slice(0, 6*AN_SLIDES);
     const pedidos = AN.lista.map(a => a.valor).sort((a,b)=>a-b);
-    s.addText([
-      {text:`${AN.lista.length} ANÚNCIO${AN.lista.length>1?"S":""}`,options:{fontSize:9,color:ICE,bold:true,charSpacing:1.5,breakLine:true}},
-      {text:"",options:{fontSize:5,breakLine:true}},
-      {text:`R$ ${nMiA(pedidos[0])} a ${nMiA(pedidos[pedidos.length-1])} mi`,options:{fontSize:17,color:WHITE,bold:true,breakLine:true}},
-      {text:"preço pedido, do menor ao maior",options:{fontSize:9,color:ICE,breakLine:true}},
-      {text:"",options:{fontSize:6,breakLine:true}},
-      ...(AN.parecidas_n ? [{text:`${AN.parecidas_n} parecida${AN.parecidas_n>1?"s":""} com a sua`,options:{fontSize:10.5,color:WHITE,bold:true,breakLine:true}},
-                            {text:`menor pedido: ${miA(AN.menor_parecida)}`,options:{fontSize:10.5,color:WHITE,breakLine:true}},
-                            {text:"",options:{fontSize:6,breakLine:true}}] : []),
-      ...(AN.mensagem ? [{text:AN.mensagem,options:{fontSize:9.5,color:ICE}}] : []),
-    ],{x:cx+0.2,y:1.82,w:cw-0.4,h:2.8,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-    s.addText(`"Parecida": casa de ${mil(AN.constr[0])} a ${mil(AN.constr[1])} m² construídos${AN.lote ? ` e, quando o anúncio informa, lote de ${mil(AN.lote[0])} a ${mil(AN.lote[1])} m²` : ""}. O site não mostra o lote de todos os anúncios — sem o lote, o anúncio só alerta e não muda o valor do estudo.`,
-      {x:MX,y:4.78,w:8.9,h:0.42,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-    footer(s,10+OFF);
+    const resumo = `${AN.lista.length} ANÚNCIO${AN.lista.length>1?"S":""} · pedidos de R$ ${nMiA(pedidos[0])} a ${nMiA(pedidos[pedidos.length-1])} mi`
+      + (AN.parecidas_n ? ` · ★ ${AN.parecidas_n} parecida${AN.parecidas_n>1?"s":""} com a sua (casa de ${mil(AN.constr[0])} a ${mil(AN.constr[1])} m²) · menor pedido: ${miA(AN.menor_parecida)}` : "");
+    const CW = (8.9 - 2*0.15)/3, CH = 1.45, FW = 1.22, Y0 = 1.9, GAP = 0.1;
+    for (let k = 0; k < AN_SLIDES; k++) {
+      const s=p.addSlide(); s.background={color:WHITE};
+      eyebrow(s,(PAR?"10":"09")+" · Concorrência"+(k?" (continuação)":"")); title(s,"Casas à venda agora — preço pedido");
+      s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.46,w:8.9,h:0.34,fill:{color:NAVY},line:{type:"none"}});
+      s.addText(resumo,{x:MX+0.15,y:1.46,w:8.6,h:0.34,fontFace:BODY,fontSize:resumo.length>120?8.5:9.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
+      lista.slice(k*6, k*6+6).forEach((a, idx) => {
+        const x = MX + (idx%3)*(CW+0.15), y = Y0 + Math.floor(idx/3)*(CH+GAP);
+        s.addShape(p.shapes.RECTANGLE,{x,y,w:CW,h:CH,fill:{color:a.parecida?ICETINT:WHITE},line:{color:a.parecida?NAVY:LINE,width:a.parecida?1.25:0.75},shadow:SH()});
+        if (a.foto) {
+          const iw = a.foto_w || 4, ih = a.foto_h || 3, r = iw/ih, bx = FW/CH;
+          s.addImage({data:a.foto,x,y,w:r>bx?CH*r:FW,h:r>bx?CH:FW/r,sizing:{type:"cover",w:FW,h:CH},
+            ...(a.url?{hyperlink:{url:a.url,tooltip:"Abrir anúncio"}}:{})});
+        } else {
+          s.addShape(p.shapes.RECTANGLE,{x,y,w:FW,h:CH,fill:{color:PAPER},line:{type:"none"}});
+          s.addText("sem foto",{x,y,w:FW,h:CH,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"center",valign:"middle",margin:0});
+        }
+        const tx = x + FW + 0.1, tw = CW - FW - 0.16;
+        const tipoQ = String(a.titulo||"").split(" · ")[0];
+        s.addText([
+          {text:miA(a.valor),options:{fontSize:14,bold:true,color:NAVY,breakLine:true}},
+          {text:tipoQ,options:{fontSize:8.5,color:MUTED,breakLine:true}},
+          {text:`Casa ${a.area_construida?mil(a.area_construida)+" m²":"—"} · lote ${a.area_terreno?mil(a.area_terreno)+" m²":"—"}`,options:{fontSize:9,color:INK,breakLine:true}},
+          {text:`${a.idade!=null?a.idade+" anos":"idade —"}${a.area_construida?" · R$ "+mil(a.valor/a.area_construida)+"/m²":""}`,options:{fontSize:9,color:INK,breakLine:true}},
+          {text:a.parecida?"★ PARECIDA COM A SUA":" ",options:{fontSize:7.5,bold:true,color:RED,charSpacing:0.5,breakLine:true}},
+          ...(a.url?[{text:`ver anúncio ${a.codigo||""} ›`,options:{fontSize:8,color:LINK,underline:true,hyperlink:{url:a.url,tooltip:"Abrir anúncio"}}}]:[]),
+        ],{x:tx,y:y+0.08,w:tw,h:CH-0.16,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
+      });
+      if (AN.mensagem) s.addText(AN.mensagem,{x:MX,y:4.92,w:8.9,h:0.3,fontFace:BODY,fontSize:9,color:INK,italic:true,align:"left",valign:"middle",margin:0});
+      footer(s,10+(PAR?1:0)+k);
+    }
   }
   if (!PAR && !AN) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
