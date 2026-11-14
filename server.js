@@ -465,9 +465,19 @@ app.post("/estudo", async (req, res) => {
   const out = path.join(os.tmpdir(), `estudo_${Date.now()}.pptx`);
   try {
     // recuperação de amostras: se vier vazio e tiver phone, busca persistência
+    // 14/11 · o corretor mandou retirar TODAS as amostras: estudo sem amostras, sem recuperar da sessão
+    if (typeof body.amostras === "string") { try { body.amostras = JSON.parse(body.amostras || "[]"); } catch (e) { body.amostras = []; } }
+    const semAmostras = body.sem_amostras === true || /^(true|sim|1)$/i.test(String(body.sem_amostras || ""));
+    if (semAmostras) body.amostras = [];
+    // 14/11 · a EVA manda as aprovadas como objetos "crus" (preco, sem tipo/valor): a fonte boa são as
+    // amostras da sessão (classificadas pelo /amostras). Usa a sessão FILTRADA pelos links aprovados —
+    // assim "remover a 2" funciona. Sem nenhum link reconhecido, cai no comportamento antigo.
+    const linkNorm = u => String(u || "").trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+    const aprovadosLinks = Array.isArray(body.amostras) ? body.amostras.map(a => linkNorm(a && a.link)).filter(Boolean) : [];
     const amostrasVazias = !body.amostras
-      || (Array.isArray(body.amostras) && body.amostras.length === 0);
-    if (amostrasVazias && body.phone && pool) {
+      || (Array.isArray(body.amostras) && body.amostras.length === 0)
+      || (aprovadosLinks.length > 0 && !body.amostras.some(a => a && a.tipo));   // crus → resolve pela sessão
+    if (amostrasVazias && !semAmostras && body.phone && pool) {
       const { getAmostrasSessao } = require("./amostras_store");
       const { amostras: persistidas, idade_h } = await getAmostrasSessao(pool, body.phone);
       // v2 (14/10) · só reaproveita amostras da sessão se forem RECENTES (≤ 6 h) e do MESMO imóvel:
@@ -480,11 +490,27 @@ app.post("/estudo", async (req, res) => {
       const recente = idade_h != null && idade_h <= 6;
       const mesmoImovel = !(au > 0 && aAval > 0) || Math.abs(aAval - au) <= au * 0.15;
       if (persistidas.length && recente && mesmoImovel) {
-        body.amostras = persistidas;
-        console.log(`/estudo: recuperadas ${persistidas.length} amostras da sessão ${body.phone}`);
+        let usar = persistidas;
+        if (aprovadosLinks.length) {
+          const set = new Set(aprovadosLinks);
+          const filtradas = persistidas.filter(a => a && (a.tipo === "avaliando" || set.has(linkNorm(a.link))));
+          if (filtradas.some(a => a.tipo !== "avaliando")) usar = filtradas;
+        }
+        body.amostras = usar;
+        console.log(`/estudo: recuperadas ${usar.length} de ${persistidas.length} amostras da sessão ${body.phone}`);
       } else if (persistidas.length) {
         console.log(`/estudo: amostras da sessão ${body.phone} IGNORADAS (idade ${idade_h != null ? idade_h.toFixed(1) : "?"} h, área avaliando salvo ${aAval || "?"} × pedida ${au || "?"})`);
       }
+    }
+    // 14/11 · se ainda sobraram amostras "cruas" da EVA (sem sessão para casar), converte para o
+    // contrato do estudo (sem isso o preço não entrava na conta: o cálculo lê `valor`, não `preco`)
+    if (Array.isArray(body.amostras) && body.amostras.some(a => a && !a.tipo && a.preco != null)) {
+      const { mapExtraction } = require("./amostra_extract");
+      const subj = { predio_curto: (body.imovel && body.imovel.predio_curto) || "" };
+      body.amostras = body.amostras.map(a => (a && !a.tipo && a.preco != null)
+        ? mapExtraction({ preco_total: a.preco, area_util_m2: a.area, suites: a.suites, vagas: a.vagas,
+            bairro: a.bairro, condominio: a.condominio_nome || "", endereco: a.address || "" }, a.link || "", subj)
+        : a);
     }
     if (body.buildingKey) {
       if (!pool) throw new Error("DATABASE_URL não configurada para buscar vendidos pela buildingKey");
