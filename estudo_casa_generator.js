@@ -322,7 +322,10 @@ function buildEstudoCasa(data, opts={}){
   }
 
   // ===== SLIDE 10 — AMOSTRAS (anúncios ativos · preço pedido) — data-driven =====
-  const PAR = (!(data.amostras||[]).length && val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
+  const PAR = (val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
+  // 14/11: anúncios informados (links do site/busca) ganham slide próprio, além das casas parecidas
+  const AN = (data.anuncios && Array.isArray(data.anuncios.lista) && data.anuncios.lista.length) ? data.anuncios : null;
+  const OFF = (PAR && AN) ? 1 : 0;   // um slide a mais desloca a numeração dos seguintes
   // 14/11 · sem anúncios informados, o slide 10 mostra as CASAS PARECIDAS vendidas (preço real pago)
   if (PAR) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Casas parecidas"); title(s,"Casas parecidas com a sua — vendas reais");
@@ -383,7 +386,46 @@ function buildEstudoCasa(data, opts={}){
       {x:MX,y:4.78,w:8.9,h:0.42,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
     footer(s,10);
   }
-  else { let s=p.addSlide(); s.background={color:WHITE};
+  // ===== 14/11 · CASAS À VENDA AGORA (anúncios informados) =====
+  if (AN) { let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,(PAR?"10":"09")+" · Concorrência"); title(s,"Casas à venda agora — preço pedido");
+    s.addText("Anúncios informados pelo corretor · preço pedido não é preço de venda",{x:MX,y:1.32,w:8.9,h:0.3,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    const mil = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const nMiA = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
+    const miA = v => v >= 995e3 ? "R$ " + nMiA(v) + " mi" : "R$ " + Math.round(v/1e3) + " mil";
+    const lista = AN.lista.slice().sort((a,b) => (b.parecida?1:0)-(a.parecida?1:0) || a.valor-b.valor).slice(0,9);
+    const hdrN=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9.5,align:"center",valign:"middle"}});
+    const cellN=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:9,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic,hyperlink:o.hyperlink,underline:o.underline}});
+    const rowsN = lista.map(a => { const f = a.parecida ? {color:ICETINT} : undefined; return [
+      cellN(a.titulo || a.codigo || "anúncio",{align:"left",fill:f,...(a.url?{hyperlink:{url:a.url,tooltip:"Abrir anúncio"},color:LINK,underline:true}:{})}),
+      cellN(a.area_construida ? `${mil(a.area_construida)} m²` : "",{fill:f}),
+      cellN(a.area_terreno ? `${mil(a.area_terreno)} m²` : "",{fill:f}),
+      cellN(a.idade != null ? `${a.idade} anos` : "",{fill:f}),
+      cellN(miA(a.valor),{fill:f,bold:true}),
+      cellN(a.area_construida ? `R$ ${mil(a.valor/a.area_construida)}` : "",{fill:f}),
+      cellN(a.parecida ? "parecida" : " ",{fill:f,color:MUTED,italic:true}),
+    ]; });
+    s.addTable([["Anúncio","Casa","Lote","Idade","Pedido","R$/m² casa",""].map(hdrN), ...rowsN],{x:MX,y:1.68,w:6.1,colW:[2.15,0.62,0.62,0.6,0.72,0.74,0.65],
+      border:{type:"solid",color:LINE,pt:0.75},rowH:0.3,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
+    const cx=6.9, cw=2.55;
+    s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.68,w:cw,h:3.0,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    const pedidos = AN.lista.map(a => a.valor).sort((a,b)=>a-b);
+    s.addText([
+      {text:`${AN.lista.length} ANÚNCIO${AN.lista.length>1?"S":""}`,options:{fontSize:9,color:ICE,bold:true,charSpacing:1.5,breakLine:true}},
+      {text:"",options:{fontSize:5,breakLine:true}},
+      {text:`R$ ${nMiA(pedidos[0])} a ${nMiA(pedidos[pedidos.length-1])} mi`,options:{fontSize:17,color:WHITE,bold:true,breakLine:true}},
+      {text:"preço pedido, do menor ao maior",options:{fontSize:9,color:ICE,breakLine:true}},
+      {text:"",options:{fontSize:6,breakLine:true}},
+      ...(AN.parecidas_n ? [{text:`${AN.parecidas_n} parecida${AN.parecidas_n>1?"s":""} com a sua`,options:{fontSize:10.5,color:WHITE,bold:true,breakLine:true}},
+                            {text:`menor pedido: ${miA(AN.menor_parecida)}`,options:{fontSize:10.5,color:WHITE,breakLine:true}},
+                            {text:"",options:{fontSize:6,breakLine:true}}] : []),
+      ...(AN.mensagem ? [{text:AN.mensagem,options:{fontSize:9.5,color:ICE}}] : []),
+    ],{x:cx+0.2,y:1.82,w:cw-0.4,h:2.8,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+    s.addText(`"Parecida": casa de ${mil(AN.constr[0])} a ${mil(AN.constr[1])} m² construídos${AN.lote ? ` e, quando o anúncio informa, lote de ${mil(AN.lote[0])} a ${mil(AN.lote[1])} m²` : ""}. O site não mostra o lote de todos os anúncios — sem o lote, o anúncio só alerta e não muda o valor do estudo.`,
+      {x:MX,y:4.78,w:8.9,h:0.42,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+    footer(s,10+OFF);
+  }
+  if (!PAR && !AN) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
     s.addText("Anúncios atuais semelhantes · calibram a estratégia de anúncio",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const amostras = data.amostras||[];
@@ -431,7 +473,7 @@ function buildEstudoCasa(data, opts={}){
 
   // ===== SLIDE 11 — CICLO DE VIDA (fixo + marcador de idade) =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"10 · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
+    eyebrow(s,String(10+OFF).padStart(2,"0")+" · Ciclo de Vida"); title(s,"Por que o valor não é só inflação");
     s.addImage({data:ASSET.cicloVida,x:MX,y:1.55,w:6.55,h:6.55*5.0/10.6});
     if (im.idade_anos != null) {
       const imgX=MX, imgY=1.55, imgW=6.55, imgH=6.55*5.0/10.6;
@@ -452,12 +494,12 @@ function buildEstudoCasa(data, opts={}){
       {text:"",options:{breakLine:true,fontSize:6}},
       {text:"A construção entra somada e depreciada: quanto mais antiga, menos agrega ao valor final.",options:{color:INK}},
     ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
-    footer(s,11);
+    footer(s,11+OFF);
   }
 
   // ===== SLIDE 12 — MÉTODO DE AVALIAÇÃO (R$/m² terreno -> faixa) =====
   { let s=p.addSlide(); s.background={color:WHITE};
-    eyebrow(s,"11 · Método"); title(s,"Do R$/m² de terreno ao valor");
+    eyebrow(s,String(11+OFF).padStart(2,"0")+" · Método"); title(s,"Do R$/m² de terreno ao valor");
     const cw=2.85, gap=0.2, y0=1.85, ch=1.5;
     const cards=[
       ["PISO · p25", val.rs_m2_terreno_p25||"", "comparáveis mais conservadores", NAVY],
@@ -478,7 +520,7 @@ function buildEstudoCasa(data, opts={}){
       bul("Usamos a mediana (não a média): uma venda atípica não distorce o resultado."),
       {text:"A construção é somada à parte, pelo custo de reposição depreciado conforme a idade.",options:{bullet:{code:"2022"},color:INK}},
     ],{x:MX,y:3.92,w:8.9,h:1.2,fontFace:BODY,fontSize:12.5,align:"left",valign:"top",margin:0,paraSpaceAfter:6});
-    footer(s,12);
+    footer(s,12+OFF);
   }
 
   // ===== SLIDE 13 — CONCLUSÃO (valor de mercado + faixa) =====
@@ -495,11 +537,11 @@ function buildEstudoCasa(data, opts={}){
       {text:`× ${val.area_terreno?val.area_terreno+" m² de terreno":"área do lote"}`,options:{fontSize:11,color:ICE}}],
       {x:MX+0.3,y:3.7,w:5.2,h:1.05,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
     s.addText(val.conclusao_apoio||"",{x:6.5,y:3.6,w:2.95,h:1.25,fontFace:BODY,fontSize:12,color:ICE,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.2});
-    footer(s,13,true);
+    footer(s,13+OFF,true);
   }
 
   // ===== DECISÃO NO TEMPO (mesmos 3 slides do apartamento; no-op sem decisao_tempo) =====
-  addDecisaoTempoSlides(p, data, { num: 12, footerStart: 14 });
+  addDecisaoTempoSlides(p, data, { num: 12 + OFF, footerStart: 14 + OFF });
 
   // ===== SLIDE 14 — RESSALVAS + CONTATO =====
   { let s=p.addSlide(); s.background={color:NAVY};
