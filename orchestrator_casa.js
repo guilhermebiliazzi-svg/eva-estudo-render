@@ -188,7 +188,8 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
     ref: body.ref || body.estudo_data,
     // 14/11: com o ponto do lote (raio geográfico), as vendas mais próximas pesam mais (metade do peso a
     // 500 m) e a banda de "fora da curva" é ±60% do centro ponderado (antes ±40% da mediana do raio todo).
-    opts: { cub, distEscala: body.ponto ? 500 : 0, tetoMediana: body.ponto ? 1.6 : 1.4 },
+    // 14/11: e as vendas mais recentes pesam mais (metade do peso a cada 24 meses), em todos os modos.
+    opts: { cub, distEscala: body.ponto ? 500 : 0, tetoMediana: body.ponto ? 1.6 : 1.4, meiaVidaMeses: 24 },
   });
   const anuncios = analisarAnuncios(body, valoracao?._debug?.valor);
   if (anuncios && anuncios.limite && valoracao && valoracao._debug && valoracao._debug.valor > anuncios.limite) {
