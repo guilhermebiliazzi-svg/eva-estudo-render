@@ -210,7 +210,7 @@ function buildEstudoCasa(data, opts={}){
   { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"07 · O Imóvel"); title(s,"O imóvel avaliado");
     const ficha = Array.isArray(im.ficha) ? im.ficha : [];
-    const gridX = MX, gridY = 1.85, colW = 4.35, gap = 0.2, rowH = 0.95;
+    const gridX = MX, gridY = 1.85, colW = 4.35, gap = 0.2, rowH = ficha.length > 6 ? 0.78 : 0.95;   // 14/11: até 8 itens (ano de construção, estado)
     if (ficha.length === 0) {
       s.addText("Ficha técnica não fornecida pelo corretor.",
         {x:gridX,y:gridY+0.3,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
@@ -219,7 +219,7 @@ function buildEstudoCasa(data, opts={}){
         const col = i % 2, row = Math.floor(i / 2);
         const x = gridX + col * (colW + gap), y = gridY + row * rowH;
         s.addText(String(par[0]||"").toUpperCase(),{x:x,y:y,w:colW,h:0.30,fontFace:BODY,fontSize:10,color:MUTED,bold:true,charSpacing:1.2,align:"left",valign:"top",margin:0});
-        s.addText(String(par[1]||"—"),{x:x,y:y+0.30,w:colW,h:0.55,fontFace:HEAD,fontSize:19,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
+        s.addText(String(par[1]||"—"),{x:x,y:y+0.28,w:colW,h:rowH>0.9?0.55:0.44,fontFace:HEAD,fontSize:rowH>0.9?19:17,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
         const lastRow = Math.floor((ficha.length-1)/2);
         if (row < lastRow) s.addShape(p.shapes.LINE,{x, y:y+rowH-0.05, w:colW, h:0, line:{color:LINE,width:0.5}});
       });
@@ -237,10 +237,13 @@ function buildEstudoCasa(data, opts={}){
     // 09/08/2023 -> 09/08/23: evita a coluna Data quebrar em 2 linhas
     const shortData = d => String(d||"").replace(/^(\d{2}\/\d{2}\/)\d{2}(\d{2})$/, "$1$2");
     const allComps = data.comps||[];
-    const MAXFIT = 6;                          // 6 linhas cabem entre y=1.7 e o caption (y=4.78); 8 estourava
+    const RG = val.regua && val.regua.min && val.regua.max && val.regua.pontos && val.regua.pontos.length >= 3 ? val.regua : null;
+    // 14/11: com a régua embaixo, a tabela mostra as 4 vendas mais próximas
+    const MAXFIT = RG ? 4 : 6;                 // 6 linhas cabem entre y=1.7 e o caption (y=4.78); 8 estourava
     let comps = allComps, trunc = 0;
     if (allComps.length > MAXFIT) { comps = allComps.slice(0, MAXFIT); trunc = allComps.length - MAXFIT; }
-    const rowH = 0.40;                          // altura fixa e determinística (antes 0.33 p/ >6 linhas estourava)
+    const rowH = RG ? 0.33 : 0.40;              // altura fixa e determinística (antes 0.33 p/ >6 linhas estourava)
+    const TY = RG ? 1.62 : 1.7;
     const rows = comps.map(c=>[
       cell(shortData(c.data)),
       cell(c.endereco,{align:"left"}),
@@ -249,27 +252,137 @@ function buildEstudoCasa(data, opts={}){
       cell(String(c.valor||"").replace(/,00$/,"")),
       cell(c.rs_m2_terreno,{bold:true}),
     ]);
-    s.addTable([head,...rows],{x:MX,y:1.7,w:5.95,colW:[1.0,1.85,0.95,0.85,1.15,1.15].map(w=>w*5.95/(1.0+1.85+0.95+0.85+1.15+1.15)),
+    s.addTable([head,...rows],{x:MX,y:TY,w:5.95,colW:[1.0,1.85,0.95,0.85,1.15,1.15].map(w=>w*5.95/(1.0+1.85+0.95+0.85+1.15+1.15)),
       border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
     // callout: estatística do R$/m² de terreno (o que sustenta a faixa)
     const cx=6.75, cw=2.7;
-    s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
-    s.addText("R$/m² DE TERRENO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
-    s.addText([
-      {text:val.rs_m2_terreno_alvo||"",options:{fontSize:26,bold:true,color:WHITE,breakLine:true}},
-      {text:"mediana (corrigida a hoje)",options:{fontSize:11,color:ICE,breakLine:true}},
-      {text:"",options:{breakLine:true,fontSize:8}},
-      {text:`faixa típica: ${val.rs_m2_terreno_p25||""} a ${val.rs_m2_terreno_p75||""}`,options:{fontSize:11,color:ICE,breakLine:true}},
-      {text:"",options:{breakLine:true,fontSize:6}},
-      {text:`${val.n_comps||comps.length} casas comparáveis`,options:{fontSize:10.5,color:ICE,italic:true}},
-    ],{x:cx+0.25,y:2.35,w:cw-0.5,h:2.2,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
-    s.addText(`Terreno e construção em m² (Cadastro Fiscal/ITBI). O comparável é o R$/m² de terreno — o que define o valor da casa.${trunc?`  ·  ${allComps.length} comparáveis no total; exibindo as ${MAXFIT} mais próximas.`:""}`,
-      {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    if (RG) {
+      const ch = rowH * (comps.length + 1);
+      s.addShape(p.shapes.RECTANGLE,{x:cx,y:TY,w:cw,h:ch,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+      s.addText("R$/m² DE TERRENO",{x:cx+0.22,y:TY+0.12,w:cw-0.44,h:0.24,fontFace:BODY,fontSize:9,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      s.addText([
+        {text:val.rs_m2_terreno_alvo||"",options:{fontSize:24,bold:true,color:WHITE,breakLine:true}},
+        {text:"mediana (corrigida a hoje)",options:{fontSize:10,color:ICE,breakLine:true}},
+        {text:`${RG.n_final} casas consideradas`,options:{fontSize:10,color:ICE,italic:true}},
+      ],{x:cx+0.22,y:TY+0.42,w:cw-0.44,h:ch-0.5,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+
+      // ---- RÉGUA: menor venda · faixa típica · este imóvel · maior venda ----
+      const milharR = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      const rsTxt = v => "R$ " + milharR(v) + "/m²";
+      const miTxt = v => v >= 995e3 ? "R$ " + (v/1e6).toFixed(2).replace(".", ",") + " mi" : "R$ " + Math.round(v/1e3) + " mil";
+      const cap = t => String(t||"").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+      const endTxt = x => [x.logradouro ? cap(x.logradouro) : "", x.numero != null ? String(x.numero) : ""].filter(Boolean).join(", ");
+      const ry = TY + rowH*(comps.length+1) + 0.2;          // topo do bloco
+      s.addText("ONDE ESTE IMÓVEL SE ENCAIXA",{x:MX,y:ry,w:5,h:0.22,fontFace:BODY,fontSize:9,color:RED,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      const bx0 = MX + 0.9, bx1 = MX + 8.9 - 0.9, by = ry + 0.86;   // linha da régua
+      const lo = RG.min.rs, hi = RG.max.rs, span = Math.max(hi - lo, 1);
+      const X = v => bx0 + (bx1 - bx0) * (Math.min(Math.max(v, lo), hi) - lo) / span;
+      // trilho + faixa típica (p25–p75)
+      s.addShape(p.shapes.RECTANGLE,{x:bx0,y:by-0.03,w:bx1-bx0,h:0.06,fill:{color:LINE},line:{type:"none"}});
+      s.addShape(p.shapes.RECTANGLE,{x:X(RG.p25),y:by-0.11,w:Math.max(X(RG.p75)-X(RG.p25),0.05),h:0.22,fill:{color:ICETINT},line:{color:ICE,width:0.75}});
+      // cada venda considerada = um ponto
+      RG.pontos.forEach(v => s.addShape(p.shapes.OVAL,{x:X(v)-0.035,y:by-0.035,w:0.07,h:0.07,fill:{color:NAVY,transparency:35},line:{type:"none"}}));
+      // este imóvel (mediana)
+      const xm = X(RG.mediana);
+      s.addShape(p.shapes.LINE,{x:xm,y:by-0.3,w:0,h:0.42,line:{color:RED,width:2}});
+      s.addText([{text:"este imóvel  ",options:{color:RED,bold:true}},{text:miTxt(RG.eq_mediana),options:{color:NAVY,bold:true}}],
+        {x:xm-1.3,y:by-0.52,w:2.6,h:0.2,fontFace:BODY,fontSize:10,align:"center",valign:"middle",margin:0});
+      // faixa típica (abaixo da faixa)
+      s.addText(`faixa típica (metade das vendas): ${miTxt(RG.eq_p25)} a ${miTxt(RG.eq_p75)}`,
+        {x:(X(RG.p25)+X(RG.p75))/2-1.7,y:by+0.14,w:3.4,h:0.2,fontFace:BODY,fontSize:8.5,color:MUTED,align:"center",valign:"middle",margin:0});
+      // pontas: vendas reais
+      const pontaTxt = (x, rot, al, xx) => s.addText([
+          {text:rot+"  ",options:{color:MUTED,breakLine:false}},{text:rsTxt(x.rs),options:{color:NAVY,bold:true,breakLine:true}},
+          {text:`${endTxt(x)} · vendida por ${miTxt(x.valor)}`,options:{color:MUTED,breakLine:true}},
+          {text:`lote ${milharR(x.area_terreno)} m²${x.area_construida ? ` · casa ${milharR(x.area_construida)} m²` : ""}`,options:{color:MUTED}},
+        ],{x:xx,y:by-0.66,w:2.9,h:0.52,fontFace:BODY,fontSize:8,align:al,valign:"bottom",margin:0,lineSpacingMultiple:1.0});
+      s.addShape(p.shapes.LINE,{x:bx0,y:by-0.1,w:0,h:0.2,line:{color:NAVY,width:1}});
+      s.addShape(p.shapes.LINE,{x:bx1,y:by-0.1,w:0,h:0.2,line:{color:NAVY,width:1}});
+      pontaTxt(RG.min, "menor R$/m²", "left", MX);
+      pontaTxt(RG.max, "maior R$/m²", "right", MX + 8.9 - 2.9);
+      // de onde vieram as vendas
+      const lote = RG.faixa_lote_relaxada ? "" : ` (fora de ${milharR(RG.lote_min)} a ${milharR(RG.lote_max)} m²)`;
+      s.addText(`${RG.n_total} vendas encontradas na região · ${RG.n_final} consideradas · descartadas: ${RG.desc_lote} por lote de tamanho muito diferente${lote} e ${RG.desc_curva} com valor fora da curva (40% acima ou abaixo do centro). Terreno e construção: Cadastro Fiscal/ITBI.${trunc?` Tabela: as ${MAXFIT} mais próximas.`:""}`,
+        {x:MX,y:by+0.42,w:8.9,h:0.36,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+    } else {
+      s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.7,w:cw,h:2.95,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+      s.addText("R$/m² DE TERRENO",{x:cx+0.25,y:1.95,w:cw-0.5,h:0.3,fontFace:BODY,fontSize:9.5,color:ICE,bold:true,charSpacing:1.5,margin:0,valign:"middle"});
+      s.addText([
+        {text:val.rs_m2_terreno_alvo||"",options:{fontSize:26,bold:true,color:WHITE,breakLine:true}},
+        {text:"mediana (corrigida a hoje)",options:{fontSize:11,color:ICE,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:8}},
+        {text:`faixa típica: ${val.rs_m2_terreno_p25||""} a ${val.rs_m2_terreno_p75||""}`,options:{fontSize:11,color:ICE,breakLine:true}},
+        {text:"",options:{breakLine:true,fontSize:6}},
+        {text:`${val.n_comps||comps.length} casas comparáveis`,options:{fontSize:10.5,color:ICE,italic:true}},
+      ],{x:cx+0.25,y:2.35,w:cw-0.5,h:2.2,fontFace:HEAD,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+      s.addText(`Terreno e construção em m² (Cadastro Fiscal/ITBI). O comparável é o R$/m² de terreno — o que define o valor da casa.${trunc?`  ·  ${allComps.length} comparáveis no total; exibindo as ${MAXFIT} mais próximas.`:""}`,
+        {x:MX,y:4.78,w:8.9,h:0.5,fontFace:BODY,fontSize:9.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.1});
+    }
     footer(s,9);
   }
 
   // ===== SLIDE 10 — AMOSTRAS (anúncios ativos · preço pedido) — data-driven =====
-  { let s=p.addSlide(); s.background={color:WHITE};
+  const PAR = (!(data.amostras||[]).length && val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
+  // 14/11 · sem anúncios informados, o slide 10 mostra as CASAS PARECIDAS vendidas (preço real pago)
+  if (PAR) { let s=p.addSlide(); s.background={color:WHITE};
+    eyebrow(s,"09 · Casas parecidas"); title(s,"Casas parecidas com a sua — vendas reais");
+    const milharP = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const miP = v => v >= 995e3 ? "R$ " + (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",") + " mi" : "R$ " + Math.round(v/1e3) + " mil";
+    const nMi = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
+    const faixaMi = (a,b) => `R$ ${nMi(a)} a ${nMi(b)} mi`;
+    const capP = t => String(t||"").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+    const mesAno = d => { const m = String(d||"").match(/(\d{4})-(\d{2})/); const M=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]; return m ? `${M[+m[2]-1]}/${m[1].slice(2)}` : String(d||""); };
+    const chave = x => [x.data,x.logradouro,x.numero,x.valor].join("|");
+    const mp = PAR.mais_parecida;
+    s.addText(`Lote de ${milharP(PAR.lote[0])} a ${milharP(PAR.lote[1])} m² e casa de ${milharP(PAR.constr[0])} a ${milharP(PAR.constr[1])} m², vendidas nos últimos 3 anos · preço efetivamente pago (ITBI)`,
+      {x:MX,y:1.32,w:8.9,h:0.3,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    // até 9 linhas: as mais caras e as mais baratas sempre entram, e a mais parecida
+    let lista = PAR.lista.slice();
+    if (lista.length > 9) {
+      const keep = new Set([0,1,2, lista.length-1, lista.length-2].map(i => chave(lista[i])));
+      if (mp) keep.add(chave(mp));
+      const meio = lista.filter(x => !keep.has(chave(x)));
+      while (keep.size < 9 && meio.length) keep.add(chave(meio.shift()));
+      lista = lista.filter(x => keep.has(chave(x)));
+    }
+    const hdrP=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9.5,align:"center",valign:"middle"}});
+    const cellP=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:9,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic}});
+    const rowsP = lista.map(x => {
+      const eMp = mp && chave(x) === chave(mp);
+      const f = eMp ? {color:ICETINT} : undefined;
+      return [
+        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? "  ★ mais parecida" : ""}`,{align:"left",fill:f,bold:eMp}),
+        cellP(`${milharP(x.area_terreno)} m²`,{fill:f}), cellP(`${milharP(x.area_construida)} m²`,{fill:f}),
+        cellP(x.ano_construcao ? String(x.ano_construcao).slice(0,4) : "—",{fill:f}),
+        cellP(mesAno(x.data),{fill:f}),
+        cellP(miP(x.valor),{fill:f,bold:true}),
+        cellP(x.na_conta ? " " : "fora da curva",{fill:f,color:MUTED,italic:true}),
+      ];
+    });
+    s.addTable([["Endereço","Lote","Casa","Ano","Venda","Vendida por",""].map(hdrP), ...rowsP],{x:MX,y:1.68,w:6.1,colW:[2.1,0.65,0.65,0.5,0.6,0.85,0.75],
+      border:{type:"solid",color:LINE,pt:0.75},rowH:0.3,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
+    // callout
+    const vc = PAR.valores_corr, q = (a,b)=>a;  // valores de hoje, ordenados
+    const qt = f => { const n=vc.length, pos=(n-1)*f, lo=Math.floor(pos), hi=Math.ceil(pos); return vc[lo] + (vc[hi]-vc[lo])*(pos-lo); };
+    const cx=6.9, cw=2.55;
+    s.addShape(p.shapes.RECTANGLE,{x:cx,y:1.68,w:cw,h:3.0,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    s.addText([
+      {text:`${PAR.n} CASAS PARECIDAS`,options:{fontSize:9,color:ICE,bold:true,charSpacing:1.5,breakLine:true}},
+      {text:"",options:{fontSize:5,breakLine:true}},
+      {text:faixaMi(vc[0], vc[vc.length-1]),options:{fontSize:17,color:WHITE,bold:true,breakLine:true}},
+      {text:"menor e maior, em valores de hoje",options:{fontSize:9,color:ICE,breakLine:true}},
+      {text:"",options:{fontSize:6,breakLine:true}},
+      {text:`metade entre ${faixaMi(qt(0.25), qt(0.75)).replace(" a ", " e ")}`,options:{fontSize:10,color:WHITE,bold:true,breakLine:true}},
+      {text:"",options:{fontSize:6,breakLine:true}},
+      ...(mp ? [{text:"A mais parecida com a sua",options:{fontSize:9,color:ICE,bold:true,breakLine:true}},
+               {text:`${capP(mp.logradouro)}, ${mp.numero}: lote ${milharP(mp.area_terreno)} m², casa ${milharP(mp.area_construida)} m², vendida por ${miP(mp.valor)} em ${mesAno(mp.data)}.`,options:{fontSize:10,color:WHITE}}] : []),
+    ],{x:cx+0.2,y:1.82,w:cw-0.4,h:2.8,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+    const nFora = PAR.lista.filter(x => !x.na_conta).length;
+    s.addText(`Valores de hoje = preço pago corrigido pelo IPCA. ${nFora ? `"Fora da curva": venda real, mas com R$/m² de terreno mais de 40% acima ou abaixo do centro da região — aparece aqui, não entra no cálculo do valor. ` : ""}${PAR.descartadas_erro ? `${PAR.descartadas_erro} registro${PAR.descartadas_erro>1?"s":""} com valor incompatível (provável erro de cadastro ou venda de parte) ficou de fora.` : ""}`,
+      {x:MX,y:4.78,w:8.9,h:0.42,fontFace:BODY,fontSize:8.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.05});
+    footer(s,10);
+  }
+  else { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Amostras"); title(s,"Comparáveis ativos — preço pedido");
     s.addText("Anúncios atuais semelhantes · calibram a estratégia de anúncio",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const amostras = data.amostras||[];
@@ -327,7 +440,7 @@ function buildEstudoCasa(data, opts={}){
       const yTop=imgY + PT*imgH, yBot=imgY + PB*imgH;
       s.addShape(p.shapes.LINE,{x:mx,y:yTop,w:0,h:yBot-yTop,line:{color:RED,width:1.5,dashType:"dash"}});
       const lblW=2.4, lx=Math.max(imgX, Math.min(mx-lblW/2, imgX+imgW-lblW));
-      s.addText(`${im.predio_curto||"esta casa"} · ~${idadeM} anos`,
+      s.addText(`${im.predio_curto||"esta casa"} · ${Math.round(Number(im.idade_anos))} anos`,   // 14/11: idade real (o gráfico vai até 40; o marcador fica no fim)
         {x:lx,y:yTop-0.32,w:lblW,h:0.27,fontFace:BODY,fontSize:10.5,color:NAVY,bold:true,align:"center",valign:"middle",margin:0,fill:{color:ICETINT}});
     }
     const tx=7.3, tw=2.2;
@@ -392,7 +505,7 @@ function buildEstudoCasa(data, opts={}){
     barra(p,s,{x:8.05,y:0,h:0.8,w:1.05,color:RED});
     eyebrowWhite(s,"Ressalvas e Contato",MX,0.55);
     s.addText("Sobre este estudo",{x:MX,y:1.05,w:9,h:0.55,fontFace:HEAD,fontSize:24,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
-    s.addText(marca(data.ressalvas) || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação separa terreno e construção (método do custo): o terreno pelo R$/m² de casas comparáveis vendidas na região (corrigido pelo IPCA), e a construção pelo custo de reposição depreciado conforme a idade. Na ausência da idade dos comparáveis, aplica-se depreciação uniforme.",
+    s.addText(marca(data.ressalvas) || "Este documento é um parecer de valor de mercado para fins de precificação e estratégia de venda — não constitui laudo de avaliação formal (NBR 14653). Baseia-se em dados públicos de ITBI (Prefeitura de São Paulo), no cadastro fiscal de lotes e em índices do IBGE disponíveis na data de elaboração. A avaliação separa terreno e construção (método do custo): o terreno pelo R$/m² de casas comparáveis vendidas na região (corrigido pelo IPCA), e a construção pelo custo de reposição depreciado conforme a idade (ano de construção do cadastro)" + (val.idade_avaliando_estimada ? `. A idade desta casa não foi informada: usamos a idade mediana das casas vendidas na região (${val.idade_avaliando} anos) — informe o ano de construção para refinar.` : "."),
       {x:MX,y:1.7,w:8.9,h:1.4,fontFace:BODY,fontSize:13,color:ICE,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.25});
     s.addShape(p.shapes.LINE,{x:MX,y:3.35,w:8.9,h:0,line:{color:B.NAVYLINE,width:1}});
     s.addImage({data:ASSET.logoBranco,x:MX,y:3.7,w:2.2,h:2.2*LOGO_H/LOGO_W});
