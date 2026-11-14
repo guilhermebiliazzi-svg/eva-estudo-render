@@ -240,7 +240,8 @@ function buildValoracaoCasa({ comps = [], avaliando = {}, ref, opts = {} }) {
   const dif = x => Math.abs(Math.log(x.terreno / areaTerr)) + Math.abs(Math.log(Number(x.area_construida) / areaConstr));
   const fmtP = x => ({ logradouro: x.logradouro || null, numero: x.numero ?? null, data: x.data,
     area_terreno: x.terreno, area_construida: Number(x.area_construida), ano_construcao: x.ano_construcao ?? null,
-    valor: Number(x.valor), valor_corr: Math.round(x.valor_corr), na_conta: naConta.has(chaveV(x)) });
+    valor: Number(x.valor), valor_corr: Math.round(x.valor_corr), na_conta: naConta.has(chaveV(x)),
+    lat: x.lat ?? null, lng: x.lng ?? null });   // 14/11: link do Google Maps
   const parecidas = parecidasTodas.length >= 3 ? {
     n: parecidasTodas.length,
     lote: [Math.round(PL[0] * areaTerr), Math.round(PL[1] * areaTerr)],
