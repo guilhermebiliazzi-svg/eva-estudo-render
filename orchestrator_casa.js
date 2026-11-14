@@ -57,6 +57,15 @@ function dataBR(d) {
 const capWords = s => String(s||"").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
 
 // comps crus (db_casa) -> linhas formatadas pra tabela do slide
+// 14/11: link do Google Maps de cada venda (ponto do lote quando há; senão, busca pelo endereço)
+function mapsUrl(c, ruaBusca) {
+  if (c && c.lat != null && c.lng != null && isFinite(c.lat) && isFinite(c.lng))
+    return `https://www.google.com/maps/search/?api=1&query=${Number(c.lat).toFixed(6)},${Number(c.lng).toFixed(6)}`;
+  const rua = (c && c.logradouro) || ruaBusca;
+  if (!rua) return null;
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${rua}, ${c.numero || ""}, São Paulo - SP`);
+}
+
 function formatComps(rows, ruaBusca) {
   return rows.map(c => {
     const rua = c.logradouro ? capWords(c.logradouro) : (ruaBusca ? capWords(ruaBusca) : "");
@@ -70,6 +79,7 @@ function formatComps(rows, ruaBusca) {
       valor: reais(c.valor),
       rs_m2_terreno: rsM2(c.rs_m2_terreno != null ? c.rs_m2_terreno : (c.area_terreno > 0 ? Math.round(c.valor / c.area_terreno) : null)),
       dist: c.dist,
+      maps: mapsUrl(c, ruaBusca),
     };
   });
 }
@@ -234,4 +244,4 @@ async function gerarEstudoCasaFromDB({ pool, assets, out, ...body }) {
   return gerarEstudoCasa({ comps, body, assets, out, pool });
 }
 
-module.exports = { gerarEstudoCasa, gerarEstudoCasaFromDB, formatComps, montarImovel, analisarAnuncios };
+module.exports = { mapsUrl, gerarEstudoCasa, gerarEstudoCasaFromDB, formatComps, montarImovel, analisarAnuncios };
