@@ -14,14 +14,15 @@
 const { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio } = require("./db_casa");
 const { buildValoracaoCasa } = require("./valoracao_casa");
 const { buildEstudoCasa } = require("./estudo_casa_generator");
-const { buildDecisaoTempo } = require("./decisao_tempo");
+const { buildDecisaoTempo, cdiLiquido } = require("./decisao_tempo");
+const { passoPara } = require("./valoracao");
 
 // CUB — custo de reposição da construção (R$/m² construído) p/ o método do custo.
 // >>> PLACEHOLDER: ajuste ao CUB-SP (SINDUSCON-SP) do padrão construtivo real. <<<
 // Override por requisição via body.cub.
 // CUB R1 (residência unifamiliar), R$/m² construído, SEM desoneração — fallback se a tabela cub_sp falhar.
 // Valor de referência: Fev/2026 R1-Normal (SindusCon-SP). Atualizado mensalmente na tabela cub_sp pelo cron.
-const CUB_PADRAO_SP = 2562.62;
+const CUB_PADRAO_SP = 2697.79;   // 14/11: R1-Normal out/2026 (SindusCon-SP) — o normal é vir da tabela cub_sp
 
 // padrão construtivo (body.padrao) -> coluna da tabela cub_sp
 const PADRAO_COL = { baixo: "r1_baixo", normal: "r1_normal", alto: "r1_alto" };
@@ -81,6 +82,12 @@ function montarImovel(body) {
   const rua    = capWords(body.rua_exibicao || body.rua || "");
   const numero = body.numero != null ? String(body.numero) : "";
   const endereco = [rua, numero].filter(Boolean).join(", ");
+  // 14/11: idade da casa — body.idade_anos ou body.ano_construcao (a EVA passa o ano da ficha de captação)
+  const anoC = parseInt(String(body.ano_construcao ?? "").replace(/\D/g, "").slice(0, 4), 10);
+  const anoHoje = new Date().getFullYear();
+  const idade = (body.idade_anos != null && body.idade_anos !== "" && Number.isFinite(Number(body.idade_anos)))
+    ? Number(body.idade_anos)
+    : (anoC >= 1850 && anoC <= anoHoje ? anoHoje - anoC : null);
   const ficha = [
     ["Tipo", tipo],
     ["Endereço", endereco || "—"],
@@ -89,13 +96,15 @@ function montarImovel(body) {
     ["Testada", body.testada ? `${milhar(body.testada)} m` : "—"],
     ["Uso atual", body.uso_atual ? capWords(body.uso_atual) : "—"],
   ];
+  if (idade != null) ficha.push(["Ano de construção", anoC >= 1850 ? `${anoC} (${idade} anos)` : `${idade} anos`]);
+  if (body.estado) ficha.push(["Estado", String(body.estado).charAt(0).toUpperCase() + String(body.estado).slice(1)]);
   return {
     titulo: `${tipo}${endereco ? " — " + endereco : ""}`,
     subtitulo: body.bairro ? `${capWords(body.bairro)}, São Paulo` : "São Paulo",
     predio_curto: endereco || tipo,
     ficha,
     foto_fachada: body.foto_fachada || (body.imovel && body.imovel.foto_fachada) || null,
-    idade_anos: body.idade_anos != null ? body.idade_anos : (body.imovel && body.imovel.idade_anos),
+    idade_anos: idade != null ? idade : (body.imovel && body.imovel.idade_anos),
   };
 }
 
@@ -114,14 +123,32 @@ async function gerarEstudoCasa({ comps, body, assets, out, pool }) {
   const decisao_tempo = buildDecisaoTempo({
     piso:          valoracao?._debug?.piso,
     valor_mercado: valoracao?._debug?.valor,
-    i_anual: 0.139, // CDI (ago/2026) — manter em sincronia com orchestrator.js
+    i_anual: cdiLiquido(0.139), // CDI (ago/2026) líquido de IR — manter em sincronia com orchestrator.js
     condominio_mensal: Number(body.condominio_mensal) || 0,
     iptu_anual:        Number(body.iptu_anual) || 0,
     aluguel_mensal:    Number(body.aluguel_mensal) || 0,
+    aluguel_moradia:   Number(body.aluguel_moradia) || 0,   // 14/11: quem mora deixa de pagar este aluguel enquanto espera
     reside: body.reside === true || /^(sim|true|1|reside|mora)$/i.test(String(body.reside||"")),
     aluga:  body.aluga  === true || /^(sim|true|1|alugad)/i.test(String(body.aluga||"")) || Number(body.aluguel_mensal) > 0,
     preco_alvo: Number(body.preco_alvo) || null,
   });
+
+  // 14/11 · CASA: a faixa (p25 · mediana · p75) é larga, então os cards de "esperar" usam o VALOR DE
+  // MERCADO (mediana) e o TETO (p75) da própria faixa. A régua do apartamento (+5% / +15% sobre o piso)
+  // dava cenários "otimistas" ABAIXO do valor de mercado (ex.: Lomas Valentinas 305: 1,47 mi < 1,53 mi).
+  if (decisao_tempo && decisao_tempo.aplicavel !== false && decisao_tempo._debug) {
+    const arred = v => Math.round(v / passoPara(v)) * passoPara(v);
+    const vm = valoracao?._debug?.valor, vt = valoracao?._debug?.teto;
+    if (vm > 0) decisao_tempo._debug.valor_intermediario = arred(vm);
+    if (vt > 0) decisao_tempo._debug.valor_superotimista = arred(vt);
+    // 14/11: raridade de cada preço entre as casas parecidas vendidas (valores de hoje)
+    const par = valoracao?.parecidas;
+    if (par && par.n >= 3) {
+      const rar = v => `${par.acima(v)} de ${par.n} casas parecidas venderam por isso ou mais`;
+      if (vm > 0) decisao_tempo._debug.raridade_inter = `${par.acima(arred(vm))} de ${par.n} parecidas venderam por isso ou mais`;
+      if (vt > 0) decisao_tempo._debug.raridade_otim = rar(arred(vt));
+    }
+  }
 
   // tabela do slide 9 usa os comps ENRIQUECIDOS (R$/m² de terreno LIMPO) p/ casar com o headline
   const compsFmt = formatComps(valoracao.comps || comps, body.rua);
