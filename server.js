@@ -494,10 +494,13 @@ app.post("/estudo", async (req, res) => {
         if (aprovadosLinks.length) {
           const set = new Set(aprovadosLinks);
           const filtradas = persistidas.filter(a => a && (a.tipo === "avaliando" || set.has(linkNorm(a.link))));
-          if (filtradas.some(a => a.tipo !== "avaliando")) usar = filtradas;
+          // 14/11: nenhum link aprovado está na sessão (ex.: pedido do painel) → fica com as cruas enviadas
+          usar = filtradas.some(a => a.tipo !== "avaliando") ? filtradas : null;
         }
-        body.amostras = usar;
-        console.log(`/estudo: recuperadas ${usar.length} de ${persistidas.length} amostras da sessão ${body.phone}`);
+        if (usar) {
+          body.amostras = usar;
+          console.log(`/estudo: recuperadas ${usar.length} de ${persistidas.length} amostras da sessão ${body.phone}`);
+        }
       } else if (persistidas.length) {
         console.log(`/estudo: amostras da sessão ${body.phone} IGNORADAS (idade ${idade_h != null ? idade_h.toFixed(1) : "?"} h, área avaliando salvo ${aAval || "?"} × pedida ${au || "?"})`);
       }
