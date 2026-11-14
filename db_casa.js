@@ -30,6 +30,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ST_Y(geom) AS lat, ST_X(geom) AS lng,                       -- 14/11: link do Google Maps no estudo
   ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   abs((numero::text)::int - $2::int)                          AS dist
@@ -55,6 +56,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ST_Y(geom) AS lat, ST_X(geom) AS lng,                       -- 14/11: link do Google Maps no estudo
   ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   round(ST_Distance(geom::geography, $1::geography))          AS dist
@@ -83,6 +85,7 @@ SELECT
   area_terreno::numeric                                       AS area_terreno,
   area_construida::numeric                                    AS area_construida,
   valor_transacao::numeric                                    AS valor,
+  ST_Y(geom) AS lat, ST_X(geom) AS lng,                       -- 14/11: link do Google Maps no estudo
   ano_construcao                                              AS ano_construcao,
   round(valor_transacao::numeric / NULLIF(area_terreno::numeric, 0)) AS rs_m2_terreno,
   0                                                           AS dist
@@ -110,6 +113,8 @@ const mapRow = r => ({
   ano_construcao: r.ano_construcao || null,   // 14/11: idade real p/ a depreciação
   rs_m2_terreno: r.rs_m2_terreno == null ? null : Number(r.rs_m2_terreno),
   dist: r.dist == null ? null : Number(r.dist),
+  lat: r.lat == null ? null : Number(r.lat),
+  lng: r.lng == null ? null : Number(r.lng),
 });
 
 /**
