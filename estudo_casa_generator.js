@@ -227,8 +227,99 @@ function buildEstudoCasa(data, opts={}){
     footer(s,8);
   }
 
+  // 14/11: com régua E casas parecidas, os dois slides de vendas viram UM (régua da região + lista das parecidas)
+  const PAR = (val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
+  const RG0 = val.regua && val.regua.min && val.regua.max && val.regua.pontos && val.regua.pontos.length >= 3 ? val.regua : null;
+  const JUNTO = !!(PAR && RG0);
+  if (JUNTO) { const s=p.addSlide(); s.background={color:WHITE}; const RG = RG0;
+    eyebrow(s,"08 · Comparáveis"); title(s,"Casas vendidas na região — ITBI");
+    const mil = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const nMi = v => (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",");
+    const miP = v => v >= 995e3 ? "R$ " + nMi(v) + " mi" : "R$ " + Math.round(v/1e3) + " mil";
+    const capP = t => String(t||"").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+    const mesAno = d => { const m = (d instanceof Date ? d.toISOString() : String(d||"")).match(/(\d{4})-(\d{2})/); const M=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]; return m ? `${M[+m[2]-1]}/${m[1].slice(2)}` : String(d||""); };
+    const chave = x => [x.data,x.logradouro,x.numero,x.valor].join("|");
+    const mapsP = x => (x.lat != null && x.lng != null && isFinite(x.lat) && isFinite(x.lng))
+      ? `https://www.google.com/maps/search/?api=1&query=${Number(x.lat).toFixed(6)},${Number(x.lng).toFixed(6)}`
+      : (x.logradouro ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${x.logradouro}, ${x.numero || ""}, São Paulo - SP`) : null);
+    s.addText(`Vendas reais registradas na Prefeitura · ${RG.n_total} casas vendidas perto da sua nos últimos 3 anos`,
+      {x:MX,y:1.32,w:8.9,h:0.26,fontFace:BODY,fontSize:11,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
+    // ---- tabela: casas parecidas (até 6: as 2 mais caras, as 2 mais baratas e a mais parecida) ----
+    const mp = PAR.mais_parecida;
+    s.addText(`CASAS PARECIDAS COM A SUA · lote de ${mil(PAR.lote[0])} a ${mil(PAR.lote[1])} m² e casa de ${mil(PAR.constr[0])} a ${mil(PAR.constr[1])} m²`,
+      {x:MX,y:1.64,w:6.2,h:0.2,fontFace:BODY,fontSize:8.5,color:RED,bold:true,charSpacing:0.5,margin:0,valign:"middle"});
+    let lista = PAR.lista.slice();
+    if (lista.length > 6) {
+      const keep = new Set([0,1, lista.length-1, lista.length-2].map(i => chave(lista[i])));
+      if (mp) keep.add(chave(mp));
+      const meio = lista.filter(x => !keep.has(chave(x)));
+      while (keep.size < 6 && meio.length) keep.add(chave(meio.shift()));
+      lista = lista.filter(x => keep.has(chave(x)));
+    }
+    const hdrP=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9,align:"center",valign:"middle"}});
+    const cellP=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:8.5,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic,hyperlink:o.hyperlink,underline:o.underline}});
+    const rowsP = lista.map(x => {
+      const eMp = mp && chave(x) === chave(mp);
+      const f = eMp ? {color:ICETINT} : undefined;
+      return [
+        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? " ★" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
+        cellP(`${mil(x.area_terreno)} m²`,{fill:f}), cellP(`${mil(x.area_construida)} m²`,{fill:f}),
+        cellP(x.ano_construcao ? String(x.ano_construcao).slice(0,4) : "—",{fill:f}),
+        cellP(mesAno(x.data),{fill:f}),
+        cellP(miP(x.valor),{fill:f,bold:true}),
+        cellP(x.na_conta ? " " : "fora da curva",{fill:f,color:MUTED,italic:true}),
+      ];
+    });
+    const rowH = 0.26, TY = 1.88;
+    s.addTable([["Endereço","Lote","Casa","Ano","Venda","Vendida por",""].map(hdrP), ...rowsP],{x:MX,y:TY,w:6.2,colW:[2.15,0.62,0.62,0.5,0.6,0.86,0.85],
+      border:{type:"solid",color:LINE,pt:0.75},rowH,valign:"middle",fontFace:BODY,autoPage:false,margin:0.03});
+    const tEnd = TY + rowH*(lista.length+1);
+    // ---- callout: R$/m² da região + faixa das parecidas ----
+    const vc = PAR.valores_corr;
+    const qt = f => { const n=vc.length, pos=(n-1)*f, lo=Math.floor(pos), hi=Math.ceil(pos); return vc[lo] + (vc[hi]-vc[lo])*(pos-lo); };
+    const cx=6.95, cw=2.5, cy=1.64, chh=tEnd-cy;
+    s.addShape(p.shapes.RECTANGLE,{x:cx,y:cy,w:cw,h:chh,fill:{color:NAVY},line:{type:"none"},shadow:SH()});
+    s.addText([
+      {text:`${PAR.n} CASAS PARECIDAS`,options:{fontSize:8.5,color:ICE,bold:true,charSpacing:1.2,breakLine:true}},
+      {text:`R$ ${nMi(vc[0])} a ${nMi(vc[vc.length-1])} mi`,options:{fontSize:16,color:WHITE,bold:true,breakLine:true}},
+      {text:`metade entre R$ ${nMi(qt(0.25))} e ${nMi(qt(0.75))} mi (valores de hoje)`,options:{fontSize:8.5,color:ICE,breakLine:true}},
+      {text:"",options:{fontSize:5,breakLine:true}},
+      {text:"R$/M² DE TERRENO (REGIÃO)",options:{fontSize:8.5,color:ICE,bold:true,charSpacing:1.2,breakLine:true}},
+      {text:val.rs_m2_terreno_alvo||"",options:{fontSize:16,color:WHITE,bold:true,breakLine:true}},
+      {text:`mediana de ${RG.n_final} casas consideradas`,options:{fontSize:8.5,color:ICE}},
+    ],{x:cx+0.18,y:cy+0.1,w:cw-0.36,h:chh-0.2,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.02});
+    // ---- régua compacta ----
+    const rsTxt = v => "R$ " + mil(v) + "/m²";
+    const endTxt = x => [x.logradouro ? capP(x.logradouro) : "", x.numero != null ? String(x.numero) : ""].filter(Boolean).join(", ");
+    const ry = tEnd + 0.12;
+    s.addText("ONDE ESTE IMÓVEL SE ENCAIXA NA REGIÃO",{x:MX,y:ry,w:5,h:0.2,fontFace:BODY,fontSize:8.5,color:RED,bold:true,charSpacing:1.2,margin:0,valign:"middle"});
+    const bx0 = MX + 0.9, bx1 = MX + 8.9 - 0.9, by = ry + 0.72;
+    const lo = RG.min.rs, hi = RG.max.rs, span = Math.max(hi - lo, 1);
+    const X = v => bx0 + (bx1 - bx0) * (Math.min(Math.max(v, lo), hi) - lo) / span;
+    s.addShape(p.shapes.RECTANGLE,{x:bx0,y:by-0.03,w:bx1-bx0,h:0.06,fill:{color:LINE},line:{type:"none"}});
+    s.addShape(p.shapes.RECTANGLE,{x:X(RG.p25),y:by-0.1,w:Math.max(X(RG.p75)-X(RG.p25),0.05),h:0.2,fill:{color:ICETINT},line:{color:ICE,width:0.75}});
+    RG.pontos.forEach(v => s.addShape(p.shapes.OVAL,{x:X(v)-0.035,y:by-0.035,w:0.07,h:0.07,fill:{color:NAVY,transparency:35},line:{type:"none"}}));
+    const xm = X(RG.mediana);
+    s.addShape(p.shapes.LINE,{x:xm,y:by-0.26,w:0,h:0.38,line:{color:RED,width:2}});
+    s.addText([{text:"este imóvel  ",options:{color:RED,bold:true}},{text:miP(RG.eq_mediana),options:{color:NAVY,bold:true}}],
+      {x:xm-1.3,y:by-0.46,w:2.6,h:0.2,fontFace:BODY,fontSize:9.5,align:"center",valign:"middle",margin:0});
+    s.addText(`faixa típica: ${miP(RG.eq_p25)} a ${miP(RG.eq_p75)}`,
+      {x:(X(RG.p25)+X(RG.p75))/2-1.5,y:by+0.12,w:3.0,h:0.18,fontFace:BODY,fontSize:8,color:MUTED,align:"center",valign:"middle",margin:0});
+    const pontaTxt = (x, rot, al, xx) => s.addText([
+        {text:rot+"  ",options:{color:MUTED}},{text:rsTxt(x.rs),options:{color:NAVY,bold:true,breakLine:true}},
+        {text:`${endTxt(x)} · vendida por ${miP(x.valor)}`,options:{color:MUTED}},
+      ],{x:xx,y:by-0.5,w:2.9,h:0.36,fontFace:BODY,fontSize:7.5,align:al,valign:"bottom",margin:0,lineSpacingMultiple:1.0});
+    s.addShape(p.shapes.LINE,{x:bx0,y:by-0.1,w:0,h:0.2,line:{color:NAVY,width:1}});
+    s.addShape(p.shapes.LINE,{x:bx1,y:by-0.1,w:0,h:0.2,line:{color:NAVY,width:1}});
+    pontaTxt(RG.min, "menor R$/m²", "left", MX);
+    pontaTxt(RG.max, "maior R$/m²", "right", MX + 8.9 - 2.9);
+    const nFora = PAR.lista.filter(x => !x.na_conta).length;
+    s.addText(`${RG.n_total} vendas na região · ${RG.n_final} consideradas (descartadas: ${RG.desc_lote} por lote muito diferente e ${RG.desc_curva} com valor fora da curva). Valores de hoje = preço pago corrigido pelo IPCA.${nFora ? ` "Fora da curva" aparece na lista, mas não entra no cálculo.` : ""} ★ = a mais parecida.`,
+      {x:MX,y:by+0.32,w:8.9,h:0.3,fontFace:BODY,fontSize:7.5,color:MUTED,italic:true,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.0});
+    footer(s,9);
+  }
   // ===== SLIDE 9 — COMPARÁVEIS VENDIDOS (ITBI, por R$/m² de terreno) =====
-  { let s=p.addSlide(); s.background={color:WHITE};
+  if (!JUNTO) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"08 · Comparáveis"); title(s,"Casas vendidas na região — ITBI");
     s.addText("Vendas reais próximas · Prefeitura de São Paulo",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:10,align:"center",valign:"middle"}});
@@ -322,13 +413,13 @@ function buildEstudoCasa(data, opts={}){
   }
 
   // ===== SLIDE 10 — AMOSTRAS (anúncios ativos · preço pedido) — data-driven =====
-  const PAR = (val.parecidas && val.parecidas.n >= 3) ? val.parecidas : null;
   // 14/11: anúncios informados (links do site/busca) ganham slide próprio, além das casas parecidas
   const AN = (data.anuncios && Array.isArray(data.anuncios.lista) && data.anuncios.lista.length) ? data.anuncios : null;
   const AN_SLIDES = AN ? Math.ceil(Math.min(AN.lista.length, 12) / 6) : 0;   // 6 cartões por slide, até 2 slides
-  const OFF = (PAR || AN) ? (PAR ? 1 : 0) + AN_SLIDES - 1 : 0;   // slides a mais deslocam a numeração dos seguintes
+  const PAR_SL = (PAR && !JUNTO) ? 1 : 0;   // slide próprio das parecidas só quando não foram juntadas ao slide 9
+  const OFF = PAR_SL + AN_SLIDES + ((!PAR && !AN) ? 1 : 0) - 1;   // slides a mais/a menos deslocam a numeração dos seguintes
   // 14/11 · sem anúncios informados, o slide 10 mostra as CASAS PARECIDAS vendidas (preço real pago)
-  if (PAR) { let s=p.addSlide(); s.background={color:WHITE};
+  if (PAR_SL) { let s=p.addSlide(); s.background={color:WHITE};
     eyebrow(s,"09 · Casas parecidas"); title(s,"Casas parecidas com a sua — vendas reais");
     const milharP = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     const miP = v => v >= 995e3 ? "R$ " + (v/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",") + " mi" : "R$ " + Math.round(v/1e3) + " mil";
@@ -406,7 +497,7 @@ function buildEstudoCasa(data, opts={}){
     const CW = (8.9 - 2*0.15)/3, CH = 1.45, FW = 1.22, Y0 = 1.9, GAP = 0.1;
     for (let k = 0; k < AN_SLIDES; k++) {
       const s=p.addSlide(); s.background={color:WHITE};
-      eyebrow(s,(PAR?"10":"09")+" · Concorrência"+(k?" (continuação)":"")); title(s,"Casas à venda agora — preço pedido");
+      eyebrow(s,(PAR_SL?"10":"09")+" · Concorrência"+(k?" (continuação)":"")); title(s,"Casas à venda agora — preço pedido");
       s.addShape(p.shapes.RECTANGLE,{x:MX,y:1.46,w:8.9,h:0.34,fill:{color:NAVY},line:{type:"none"}});
       s.addText(resumo,{x:MX+0.15,y:1.46,w:8.6,h:0.34,fontFace:BODY,fontSize:resumo.length>120?8.5:9.5,color:WHITE,bold:true,align:"left",valign:"middle",margin:0});
       lista.slice(k*6, k*6+6).forEach((a, idx) => {
@@ -432,7 +523,7 @@ function buildEstudoCasa(data, opts={}){
         ],{x:tx,y:y+0.08,w:tw,h:CH-0.16,fontFace:BODY,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12});
       });
       if (AN.mensagem) s.addText(AN.mensagem,{x:MX,y:4.92,w:8.9,h:0.3,fontFace:BODY,fontSize:9,color:INK,italic:true,align:"left",valign:"middle",margin:0});
-      footer(s,10+(PAR?1:0)+k);
+      footer(s,10+PAR_SL+k);
     }
   }
   if (!PAR && !AN) { let s=p.addSlide(); s.background={color:WHITE};
