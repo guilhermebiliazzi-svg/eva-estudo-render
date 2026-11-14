@@ -23,6 +23,16 @@ const fmtDate = d => {                                                          
 // "AP 231  1DEP 5VG" -> "AP 231 · 5 vagas" ; "AP 101  1DEP" -> "AP 101"
 function cleanUnidade(c) {
   if (!c) return "";
+  // 14/11: "AP 112 VG" (número da unidade + VG solto) virava "AP · 112 vagas" — o número antes do VG
+  // só é quantidade quando NÃO é o número da unidade. Também trata "AP 81 E VG(S)".
+  const s0 = String(c).replace(/\s+/g, " ").trim();
+  const mq = s0.match(/(\d+)\s*VGS?\b/i);
+  if (mq && mq.index === s0.search(/\d/) && !/\d+\s*DEP\b/i.test(s0.slice(0, mq.index + mq[0].length))) {
+    const base = s0.slice(0, mq.index + mq[1].length).trim();
+    return `${base} · com vaga`;
+  }
+  const mE = s0.match(/^(.*?\d+)\s+E\s+(?:(\d+)\s*)?VGS?\b/i);
+  if (mE) return mE[2] ? `${mE[1]} · ${mE[2]} vaga${+mE[2] > 1 ? "s" : ""}` : `${mE[1]} · com vaga`;
   const vg = (String(c).match(/(\d+)\s*VG\b/i) || [])[1];
   c = String(c).replace(/\s*\d+\s*DEP\b/ig, "").replace(/\s*\d+\s*VG\b/ig, "")
                .replace(/\s+/g, " ").trim();
