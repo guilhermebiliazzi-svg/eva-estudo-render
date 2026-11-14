@@ -233,7 +233,7 @@ function buildEstudoCasa(data, opts={}){
     s.addText("Vendas reais próximas · Prefeitura de São Paulo",{x:MX,y:1.32,w:8,h:0.3,fontFace:BODY,fontSize:12,color:MUTED,italic:true,align:"left",valign:"middle",margin:0});
     const hdr=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:10,align:"center",valign:"middle"}});
     const head=["Data","Endereço","Terreno","Constr.","Valor","R$/m² terr."].map(hdr);
-    const cell=(t,o={})=>({text:String(t),options:{fontSize:9.5,color:INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold}});
+    const cell=(t,o={})=>({text:String(t),options:{fontSize:9.5,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,hyperlink:o.hyperlink,underline:o.underline}});
     // 09/08/2023 -> 09/08/23: evita a coluna Data quebrar em 2 linhas
     const shortData = d => String(d||"").replace(/^(\d{2}\/\d{2}\/)\d{2}(\d{2})$/, "$1$2");
     const allComps = data.comps||[];
@@ -246,7 +246,7 @@ function buildEstudoCasa(data, opts={}){
     const TY = RG ? 1.62 : 1.7;
     const rows = comps.map(c=>[
       cell(shortData(c.data)),
-      cell(c.endereco,{align:"left"}),
+      cell(c.endereco,{align:"left",...(c.maps?{hyperlink:{url:c.maps,tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
       cell(c.area_terreno),
       cell(c.area_construida),
       cell(String(c.valor||"").replace(/,00$/,"")),
@@ -350,12 +350,16 @@ function buildEstudoCasa(data, opts={}){
       lista = lista.filter(x => keep.has(chave(x)));
     }
     const hdrP=(t)=>({text:t,options:{fill:{color:NAVY},color:WHITE,bold:true,fontSize:9.5,align:"center",valign:"middle"}});
-    const cellP=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:9,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic}});
+    const cellP=(t,o={})=>({text:String(t==null||t===""?"—":t),options:{fontSize:9,color:o.color||INK,align:o.align||"center",valign:"middle",fill:o.fill,bold:o.bold,italic:o.italic,hyperlink:o.hyperlink,underline:o.underline}});
+    // 14/11: endereço vira link do Google Maps (ponto do lote quando há)
+    const mapsP = x => (x.lat != null && x.lng != null && isFinite(x.lat) && isFinite(x.lng))
+      ? `https://www.google.com/maps/search/?api=1&query=${Number(x.lat).toFixed(6)},${Number(x.lng).toFixed(6)}`
+      : (x.logradouro ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${x.logradouro}, ${x.numero || ""}, São Paulo - SP`) : null);
     const rowsP = lista.map(x => {
       const eMp = mp && chave(x) === chave(mp);
       const f = eMp ? {color:ICETINT} : undefined;
       return [
-        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? "  ★ mais parecida" : ""}`,{align:"left",fill:f,bold:eMp}),
+        cellP(`${capP(x.logradouro)}, ${x.numero}${eMp ? "  ★ mais parecida" : ""}`,{align:"left",fill:f,bold:eMp,...(mapsP(x)?{hyperlink:{url:mapsP(x),tooltip:"Ver no Google Maps"},color:LINK,underline:true}:{})}),
         cellP(`${milharP(x.area_terreno)} m²`,{fill:f}), cellP(`${milharP(x.area_construida)} m²`,{fill:f}),
         cellP(x.ano_construcao ? String(x.ano_construcao).slice(0,4) : "—",{fill:f}),
         cellP(mesAno(x.data),{fill:f}),
