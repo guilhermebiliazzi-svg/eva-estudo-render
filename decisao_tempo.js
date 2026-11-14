@@ -51,6 +51,10 @@ const mi      = v => Number(v) < 1e6 ? reais(v) : "R$ " + (v/1e6).toFixed(decs(v
 const reaisEx = v => "R$ " + milhar(v) + ",00";                       // sem arredondar p/ milhar (custos)
 const pctBR   = f => (f*100).toFixed(1).replace(".", ",") + "%";
 const CDI_ANUAL_PADRAO = 0.139;                                       // ago/2026 · atualizar quando a Selic mudar
+// 14/11: o custo de oportunidade é o CDI LÍQUIDO de IR (o vendedor recebe o rendimento depois do imposto).
+// 15% = alíquota de aplicações acima de 2 anos (a menor da tabela regressiva).
+const IR_APLICACAO = 0.15;
+const cdiLiquido = (cdi = CDI_ANUAL_PADRAO) => +(cdi * (1 - IR_APLICACAO)).toFixed(4);
 
 /**
  * @returns objeto do bloco "decisao_tempo" (strings prontas + _debug numérico), ou
@@ -63,6 +67,7 @@ function buildDecisaoTempo({
   condominio_mensal = 0,
   iptu_anual = 0,
   aluguel_mensal = 0,
+  aluguel_moradia = 0,        // (14/11) se o dono MORA: aluguel que pagaria num imóvel igual (deixa de pagar enquanto espera)
   reside = false,             // proprietário mora no imóvel
   aluga = false,              // imóvel gera renda de aluguel
   encargos_locatario = false, // (28/09) no imóvel alugado, INQUILINO paga condô/IPTU → aluguel entra limpo
@@ -88,7 +93,8 @@ function buildDecisaoTempo({
   const custoBrutoMensal = Number(condominio_mensal) + Number(iptu_anual) / 12;
   let custoCarregMensal, regime;
   if (reside) {
-    custoCarregMensal = 0;                                  regime = "reside";       // usa o bem; só capital
+    // 14/11 (Guilherme): quem mora não paga aluguel enquanto espera — esse aluguel abate o custo de esperar.
+    custoCarregMensal = -(Number(aluguel_moradia) || 0);    regime = "reside";
   } else if (aluga) {
     // (28/09) se o INQUILINO paga condô/IPTU, o aluguel entra 100% limpo: carregamento = − aluguel.
     // caso contrário (dono paga), o aluguel abate os custos que o dono continua pagando.
@@ -152,6 +158,9 @@ function buildDecisaoTempo({
         perda: valorFV > 0 ? milhoes(valorFV) : "sem perda",
         vp: milhoes(vp),                                     // valor presente da estratégia de esperar
         vp_vs_agora: milhoes(P3 - vp),                       // quanto a menos que vender agora (em R$ de hoje)
+        // 14/11: com sinal — antes a matriz escrevia "−" fixo e um ganho aparecia como perda
+        vp_vs_agora_signed: (vp - P3 >= 0 ? "+" : "−") + milhoes(Math.abs(vp - P3)),
+        _dvp: Math.round(vp - P3),
         _perda: Math.round(valorFV), _vp: Math.round(vp),
       };
     });
@@ -181,7 +190,9 @@ function buildDecisaoTempo({
     ? ` O alvo considerado é ${milhoes(alvoEff)} (${alvoOrigem === "informado_dono" ? "preço do proprietário" : "preço médio de mercado"}) — só se paga se o mercado o absorver no prazo.`
     : "";
   const regimeTxt = regime === "reside"
-    ? "Como o proprietário reside no imóvel, os custos de condomínio/IPTU não entram (uso do bem), mas o capital segue imobilizado — por isso o custo de oportunidade permanece."
+    ? (Number(aluguel_moradia) > 0
+        ? `Como o proprietário mora no imóvel, enquanto espera ele deixa de pagar o aluguel de um imóvel igual (${reaisEx(Math.round(aluguel_moradia))}/mês) — isso abate o custo de manter o capital parado.`
+        : "Como o proprietário reside no imóvel, os custos de condomínio/IPTU não entram (uso do bem), mas o capital segue imobilizado — por isso o custo de oportunidade permanece.")
     : regime === "alugado"
       ? (encargos_locatario
           ? "Como o imóvel está alugado e o inquilino arca com condomínio e IPTU, o aluguel entra integralmente como renda que abate o custo de carregar o imóvel no período."
@@ -203,9 +214,11 @@ function buildDecisaoTempo({
       : `preço médio de mercado do estudo (${milhoes(alvoEff)}) — proprietário sem alvo definido`),
     i_mensal_pct: pctBR(im),
     i_anual_pct: pctBR(iaEff),
-    taxa_label: `custo de oportunidade ${pctBR(iaEff)} a.a. (CDI) · ${pctBR(im)} a.m.`,
+    taxa_label: `custo de oportunidade ${pctBR(iaEff)} a.a. (CDI líquido de IR) · ${pctBR(im)} a.m.`,
     custo_carreg_mensal: custoCarregMensal > 0 ? reaisEx(Math.round(custoCarregMensal)) : (custoCarregMensal < 0 ? "renda líquida " + reaisEx(Math.round(-custoCarregMensal)) : "—"),
-    custo_carreg_label: (aluga && encargos_locatario)
+    custo_carreg_label: (regime === "reside" && Number(aluguel_moradia) > 0)
+      ? `aluguel que deixa de pagar morando no imóvel: ${reaisEx(Math.round(aluguel_moradia))}/mês`
+      : (aluga && encargos_locatario)
       ? `aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês — inquilino paga condomínio e IPTU`
       : `condomínio ${reaisEx(Math.round(condominio_mensal))}/mês${Number(iptu_anual) > 0 ? ` + IPTU ${reaisEx(Math.round(iptu_anual/12))}/mês` : " · IPTU não informado"}${aluga ? ` − aluguel ${reaisEx(Math.round(aluguel_mensal))}/mês` : ""}`,
     regime_texto: regimeTxt,
@@ -217,7 +230,7 @@ function buildDecisaoTempo({
       "Nesse caso a perda não some: ela aumenta. Mesmo voltando ao preço de venda rápida depois de 12/24 meses, " +
       "o proprietário já perdeu todo o custo de esperar; se fechar abaixo do piso, a perda cresce na mesma proporção do desconto.",
     _debug: {
-      regime, P3, im: +im.toFixed(6), i_anual_efetiva: +iaEff.toFixed(4),
+      regime, P3, im: +im.toFixed(6), i_anual_efetiva: +iaEff.toFixed(4), aluguel_moradia: Math.round(Number(aluguel_moradia) || 0),
       encargos_locatario: !!(aluga && encargos_locatario),
       custo_carreg_mensal: Math.round(custoCarregMensal),
       cenarios: cenarios.map(c => ({ meses: c.meses, ...Object.fromEntries(Object.entries(c._n).map(([k,v]) => [k, v==null?null:Math.round(v)])) })),
@@ -225,4 +238,4 @@ function buildDecisaoTempo({
   };
 }
 
-module.exports = { buildDecisaoTempo, CDI_ANUAL_PADRAO };
+module.exports = { buildDecisaoTempo, CDI_ANUAL_PADRAO, IR_APLICACAO, cdiLiquido };
