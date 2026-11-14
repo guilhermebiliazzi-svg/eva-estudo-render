@@ -19,11 +19,11 @@ const { fetchVendidos, excluirVendidos, manterVendidos } = require("./db");
 const { vendidosFromRows, aggregateByDate } = require("./itbi_format");
 const { buildValoracao, areaIdentica } = require("./valoracao");
 const { buildEstudo } = require("./estudo_generator");
-const { buildDecisaoTempo } = require("./decisao_tempo");
+const { buildDecisaoTempo, cdiLiquido } = require("./decisao_tempo");
 
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                              tipo, area_util, area_total, itbi_excluir, itbi_manter,
-                             condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                             condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
                              reforma_ano, reforma_padrao, estado, mobilia_valor, vagas }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
@@ -96,10 +96,11 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
   const decisao_tempo = buildDecisaoTempo({
     piso:          valoracao?._debug?.faixa?.[0],
     valor_mercado: valoracao?._debug?.valor_mercado,
-    i_anual: 0.139, // CDI (ago/2026). Atualizar quando a Selic mudar (ou puxar da série do BCB).
+    i_anual: cdiLiquido(0.139), // CDI (ago/2026) líquido de IR. Atualizar quando a Selic mudar (ou puxar da série do BCB).
     condominio_mensal: Number(condominio_mensal) || 0,
     iptu_anual:        Number(iptu_anual) || 0,
     aluguel_mensal:    Number(aluguel_mensal) || 0,
+    aluguel_moradia:   Number(aluguel_moradia) || 0,   // 14/11: quem mora deixa de pagar este aluguel enquanto espera
     reside: reside === true || /^(sim|true|1|reside|mora)$/i.test(String(reside||"")),
     aluga:  aluga  === true || /^(sim|true|1|alugad)/i.test(String(aluga||"")) || Number(aluguel_mensal) > 0,
     preco_alvo: Number(preco_alvo) || null,
@@ -131,14 +132,14 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
                                    tipo, area_util, area_total, itbi_excluir, itbi_manter,
-                                   condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                                   condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
                                    reforma_ano, reforma_padrao, estado, mobilia_valor, vagas }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                        tipo, area_util, area_total, itbi_manter, /* exclusão já aplicada no fetch */
-                       condominio_mensal, iptu_anual, aluguel_mensal, reside, aluga, preco_alvo,
+                       condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
                        reforma_ano, reforma_padrao, estado, mobilia_valor, vagas });
 }
 
