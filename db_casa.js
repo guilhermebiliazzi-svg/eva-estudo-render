@@ -163,4 +163,31 @@ async function fetchCompsByCondominio(pool, rua, numero, opts = {}) {
   return rows.map(mapRow);
 }
 
-module.exports = { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio, SQL_STREET, SQL_RADIUS, SQL_CONDO };
+// 14/11 · VENDA ANTERIOR DO PRÓPRIO IMÓVEL (caso Diogo de Faria 109: vendida por R$ 2,5 mi em 2022 e o
+// estudo dava R$ 2,2 mi). Mesmo lote = ponto a até 25 m, mesmo número e lote ±10%. Últimos 10 anos.
+const SQL_PROPRIA = `
+SELECT data_transacao::date AS data, logradouro, numero,
+  area_terreno::numeric AS area_terreno, area_construida::numeric AS area_construida,
+  valor_transacao::numeric AS valor, ano_construcao,
+  ST_Y(geom) AS lat, ST_X(geom) AS lng,
+  round(ST_Distance(geom::geography, $1::geography)) AS dist
+FROM vendidos_itbi_usados
+WHERE geom IS NOT NULL
+  AND ST_DWithin(geom::geography, $1::geography, 25)
+  AND regexp_replace(split_part(numero::text, '.', 1), '\\D', '', 'g') = $2
+  AND area_terreno::numeric BETWEEN $3::numeric * 0.9 AND $3::numeric * 1.1
+  AND fracao_ideal = 1   -- sem filtro de uso: é o mesmo lote (a Diogo de Faria 109 está como escritório/consultório)
+  AND valor_transacao::numeric > 0
+  AND data_transacao >= (CURRENT_DATE - interval '10 years')
+ORDER BY data_transacao DESC
+LIMIT 1;`;
+
+async function fetchVendaPropria(pool, ponto, numero, areaTerreno) {
+  const num = String(numero ?? "").replace(/\D/g, "");
+  const at = Number(areaTerreno);
+  if (!ponto || !num || !(at > 0)) return null;
+  const { rows } = await pool.query(SQL_PROPRIA, [ponto, num, at]);
+  return rows.length ? { ...mapRow(rows[0]), propria: true } : null;
+}
+
+module.exports = { fetchCompsByStreet, fetchCompsByRadius, fetchCompsByCondominio, fetchVendaPropria, SQL_STREET, SQL_RADIUS, SQL_CONDO, SQL_PROPRIA };
