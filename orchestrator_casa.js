@@ -168,11 +168,11 @@ function analisarAnuncios(body, valorMercado) {
     const abaixo = par.filter(a => a.valor < valorMercado).length;
     if (tetoLote != null && tetoLote < valorMercado) {
       limite = tetoLote;
-      mensagem = `Uma casa parecida, com lote parecido, pede ${mi(tetoLote)}. O valor de mercado do estudo foi limitado a esse pedido.`;
+      mensagem = `Uma casa do tamanho da sua, com lote parecido, pede ${mi(tetoLote)}. O valor de mercado do estudo foi limitado a esse pedido.`;
     } else if (abaixo) {
-      mensagem = `${abaixo} de ${par.length} parecida${par.length > 1 ? "s" : ""} pede${abaixo > 1 ? "m" : ""} menos que o valor de mercado do estudo (${mi(valorMercado)}): o comprador vai comparar idade, estado e lote.`;
+      mensagem = `${abaixo} de ${par.length} casa${par.length > 1 ? "s" : ""} do tamanho da sua pede${abaixo > 1 ? "m" : ""} menos que o valor de mercado do estudo (${mi(valorMercado)}): o comprador vai comparar idade, estado e lote.`;
     } else {
-      mensagem = `Todas as parecidas pedem mais que o valor de mercado do estudo (${mi(valorMercado)}): o preço fica competitivo na vitrine.`;
+      mensagem = `Todas as casas do tamanho da sua pedem mais que o valor de mercado do estudo (${mi(valorMercado)}): o preço fica competitivo na vitrine.`;
     }
   }
   return { lista, constr, lote, parecidas_n: par.length, menor_parecida: menor, limite, mensagem };
