@@ -121,6 +121,24 @@ function montarImovel(body) {
 // 14/11 · anúncios à venda informados pelo corretor (links do site expandidos no n8n).
 // Preço PEDIDO não entra na conta das vendas; serve de alerta. Só limita o valor recomendado quando
 // o anúncio é parecido E informa o lote (dá para comparar casa com casa).
+// foto do anúncio (miniatura JPEG/PNG em base64 vinda do n8n) + dimensões para o recorte no cartão
+function fotoOk(foto) {
+  const m = typeof foto === "string" && foto.match(/^(?:data:)?image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m || m[2].length > 600000) return {};
+  const b = Buffer.from(m[2], "base64");
+  let w = null, h = null;
+  if (m[1] === "png" && b.length > 24) { w = b.readUInt32BE(16); h = b.readUInt32BE(20); }
+  else {
+    for (let i = 2; i + 9 < b.length;) {
+      if (b[i] !== 0xFF) { i++; continue; }
+      const mk = b[i + 1], len = b.readUInt16BE(i + 2);
+      if (mk >= 0xC0 && mk <= 0xCF && ![0xC4, 0xC8, 0xCC].includes(mk)) { h = b.readUInt16BE(i + 5); w = b.readUInt16BE(i + 7); break; }
+      i += 2 + len;
+    }
+  }
+  return { foto: `image/${m[1]};base64,${m[2]}`, foto_w: w, foto_h: h };
+}
+
 function analisarAnuncios(body, valorMercado) {
   const brutos = Array.isArray(body.anuncios) ? body.anuncios : [];
   const ac = Number(body.area_construida) || 0, lt = Number(body.area_terreno) || 0;
@@ -129,6 +147,7 @@ function analisarAnuncios(body, valorMercado) {
     valor: Number(a.valor) || 0, area_construida: Number(a.area_construida) || 0,
     area_terreno: Number(a.area_terreno) || 0, quartos: a.quartos != null ? Number(a.quartos) : null,
     idade: a.idade != null && a.idade !== "" ? Number(a.idade) : null,
+    ...fotoOk(a.foto),
   })).filter(a => a.valor > 0);
   if (!lista.length) return null;
   const constr = ac ? [Math.round(ac * 0.7), Math.round(ac * 1.45)] : null;
@@ -151,7 +170,7 @@ function analisarAnuncios(body, valorMercado) {
       limite = tetoLote;
       mensagem = `Uma casa parecida, com lote parecido, pede ${mi(tetoLote)}. O valor de mercado do estudo foi limitado a esse pedido.`;
     } else if (abaixo) {
-      mensagem = `${abaixo} de ${par.length} parecida${par.length > 1 ? "s" : ""} pede${abaixo > 1 ? "m" : ""} menos que o valor de mercado do estudo (${mi(valorMercado)}). O comprador vai comparar: veja idade, estado e lote antes de fixar o preço.`;
+      mensagem = `${abaixo} de ${par.length} parecida${par.length > 1 ? "s" : ""} pede${abaixo > 1 ? "m" : ""} menos que o valor de mercado do estudo (${mi(valorMercado)}): o comprador vai comparar idade, estado e lote.`;
     } else {
       mensagem = `Todas as parecidas pedem mais que o valor de mercado do estudo (${mi(valorMercado)}): o preço fica competitivo na vitrine.`;
     }
