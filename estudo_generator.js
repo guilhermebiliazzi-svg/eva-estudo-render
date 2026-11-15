@@ -386,7 +386,9 @@ function buildEstudo(data, opts={}){
         // nome padrão da extração é "<bairro> <área>m²": aí basta o bairro (a área já vai na linha de baixo)
         const nomeA = /\d+\s*m²$/.test(String(a.nome||"")) ? (a.bairro || a.nome) : (a.nome || a.bairro || "Anúncio");
         const rot = a.tipo==="avaliando" ? "Seu imóvel (anúncio atual)" : a.tipo==="mesmo_predio" ? "Mesmo condomínio" : truncA(nomeA, 30);
-        const cod = (String(a.link||"").split(/[?#]/)[0].replace(/\/+$/,"").match(/-([A-Za-z0-9]{3,12})$/) || [])[1] || "";   // código no fim do link
+        // código do anúncio: id numérico no caminho (QuintoAndar) ou fim do link em maiúsculas/números (villejardins "-IIGFT", "id-33036827")
+        const lk0 = String(a.link||"").split(/[?#]/)[0].replace(/\/+$/,"");
+        const cod = (lk0.match(/\/(\d{6,12})(?:\/|$)/) || lk0.match(/-([A-Z0-9]{3,14})$/) || [])[1] || "";
         const sv = isComercial ? "" : (a.suites ? `${a.suites} suíte${a.suites==="1"?"":"s"}` : "");
         const vg = a.vagas ? `${a.vagas} vaga${a.vagas==="1"?"":"s"}` : "";
         const linha = [a.area, sv, vg].filter(Boolean).join(" · ") || "—";
