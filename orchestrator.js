@@ -24,7 +24,7 @@ const { buildDecisaoTempo, cdiLiquido } = require("./decisao_tempo");
 async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                              tipo, area_util, area_total, itbi_excluir, itbi_manter,
                              condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
-                             reforma_ano, reforma_padrao, estado, mobilia_valor, vagas }) {
+                             reforma_ano, reforma_padrao, estado, mobilia_valor, vagas, endereco }) {
   let rawRows = Array.isArray(vendidosRows) ? vendidosRows : [];
 
   // (1b) curadoria do corretor (PASSO 3.5 da EVA) — v3: itbi_manter (lista de APROVADAS) tem
@@ -60,6 +60,20 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
     });
   }
 
+  // (2b2) 17/11 · COMPRA DO PRÓPRIO IMÓVEL ANTES DA REFORMA: a venda da mesma unidade avaliada, feita no
+  //      ano da reforma ou antes, é o preço do imóvel SEM a obra (em geral compra de investidor para reformar).
+  //      Não ancora o valor (virava "compra + custo da obra", lucro zero — caso Artur de Azevedo 1557 ap 42):
+  //      fica na tabela só como referência. Se for a única venda, continua na conta (não há outra base).
+  const unidadeDe = s => { const m = String(s || "").match(/\b(?:ap(?:to|t|artamento)?|cj|conj(?:unto)?|sala|unid(?:ade)?)\.?\s*n?[ºo°]?\s*0*(\d{1,5}[a-z]?)\b/i); return m ? m[1].toUpperCase() : null; };
+  const anoDe = d => d instanceof Date ? d.getUTCFullYear() : Number((String(d || "").match(/(\d{4})/) || [])[1]) || null;
+  const unAval = unidadeDe(endereco);
+  const anoRf = Number(reforma_ano) || null;
+  if (unAval && anoRf) {
+    aggRows = aggRows.map(r => (unidadeDe(r.unidade) === unAval && anoDe(r.data) && anoDe(r.data) <= anoRf) ? { ...r, propria_pre_reforma: true } : r);
+  }
+  const rowsValor = aggRows.some(r => !r.propria_pre_reforma) ? aggRows.filter(r => !r.propria_pre_reforma) : aggRows;
+  if (rowsValor.length < aggRows.length) console.log(`estudo: compra do próprio imóvel (unidade ${unAval}) antes da reforma de ${anoRf} fora da base do valor`);
+
   // (2c) v3.9 · amostras de tamanho incompatível NÃO entram no estudo (nem na tabela, nem na conta).
   //      Fora de ±30% da área útil não é comparável — 43 m² não se compara com 124 m².
   const numA = v => { const m = String(v ?? "").match(/\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(",", ".")) : 0; };
@@ -76,7 +90,7 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
   // (3) valoração sobre dados agregados — âncora vira "apto + vagas" (valor real)
   //     v2: com area_total, só vendas de unidade de ÁREA IDÊNTICA podem ancorar
   const valoracao = buildValoracao({
-    vendidos: aggRows,
+    vendidos: rowsValor,
     amostras: amostrasOk,
     ref,
     opts: {
@@ -114,6 +128,15 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
       if (vendidosFmt[i] && areaIdentica(Number(r.area_m2 || 0), at)) vendidosFmt[i].equivalente = true;
     });
   }
+  // 17/11 · a compra do próprio imóvel antes da reforma aparece como referência, sem destaque de "mesma planta"
+  if (rowsValor.length < aggRows.length) {
+    aggRows.forEach((r, i) => {
+      if (r.propria_pre_reforma && vendidosFmt[i]) {
+        vendidosFmt[i].equivalente = false; vendidosFmt[i].propria = true;
+        vendidosFmt[i].unidade = vendidosFmt[i].unidade + " (este imóvel, antes da reforma)";
+      }
+    });
+  }
 
   return buildEstudo({
     imovel: imovel || {},
@@ -133,14 +156,14 @@ async function gerarEstudo({ vendidosRows, imovel, corretor, amostras, estudo_da
 async function gerarEstudoFromDB({ pool, buildingKey, imovel, corretor, amostras, estudo_data, ref, assets, out,
                                    tipo, area_util, area_total, itbi_excluir, itbi_manter,
                                    condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
-                                   reforma_ano, reforma_padrao, estado, mobilia_valor, vagas }) {
+                                   reforma_ano, reforma_padrao, estado, mobilia_valor, vagas, endereco }) {
   if (!buildingKey) throw new Error("buildingKey ausente");
   if (!pool)        throw new Error("pool Postgres ausente");
   const rawRows = await fetchVendidos(pool, buildingKey, { excluir: itbi_excluir });
   return gerarEstudo({ vendidosRows: rawRows, imovel, corretor, amostras, estudo_data, ref, assets, out,
                        tipo, area_util, area_total, itbi_manter, /* exclusão já aplicada no fetch */
                        condominio_mensal, iptu_anual, aluguel_mensal, aluguel_moradia, reside, aluga, preco_alvo,
-                       reforma_ano, reforma_padrao, estado, mobilia_valor, vagas });
+                       reforma_ano, reforma_padrao, estado, mobilia_valor, vagas, endereco });
 }
 
 module.exports = { gerarEstudo, gerarEstudoFromDB };
