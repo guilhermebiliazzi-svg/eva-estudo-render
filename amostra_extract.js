@@ -61,22 +61,31 @@ function refFromUrl(u) {
 function extractFromMarkdown(md) {
   const ext = {};
 
+  // 17/11 · páginas lidas pelo scrape.do (Imovelweb etc.) vêm em HTML achatado, com espaços e quebras
+  //         no meio dos números ("41\n m² útil"). Normaliza e tenta antes os padrões explícitos.
+  const flat = String(md || "").replace(/\s+/g, " ");
+  const tituloPreco = (flat.match(/TITULO:[^|]*?R\$\s*([\d][\d.,]*)/i) || [])[1];
+  if (tituloPreco && parseN(tituloPreco) > 1000) ext.preco_total = String(parseN(tituloPreco));
+  const utilMatch = flat.match(/(\d{2,4}(?:[.,]\d+)?)\s*m[²2]\s*(?:[úu]til|[úu]teis|privativ)/i)
+                 || flat.match(/[áa]rea\s+(?:[úu]til|privativa)\s*:?\s*(\d{2,4}(?:[.,]\d+)?)\s*m[²2]/i);
+  if (utilMatch) ext.area_util_m2 = utilMatch[1].replace(",", ".");
+
   // 1) PREÇO — o maior R$ vence (preço > condomínio > IPTU)
   const monies = [...md.matchAll(/R\$\s*([\d][\d.,]*)/g)]
     .map(m => parseN(m[1]))
     .filter(n => n > 1000); // descarta valores muito pequenos (provavelmente não é preço)
-  if (monies.length) ext.preco_total = String(Math.max(...monies));
+  if (monies.length && !ext.preco_total) ext.preco_total = String(Math.max(...monies));
 
   // 2) ÁREA ÚTIL — primeira ocorrência de "<n> m²" (² não é word char, então sem \b)
   const areaMatch = md.match(/(\d{2,4}(?:[.,]\d+)?)\s*m[²2]/i);
-  if (areaMatch) ext.area_util_m2 = areaMatch[1].replace(",", ".");
+  if (areaMatch && !ext.area_util_m2) ext.area_util_m2 = areaMatch[1].replace(",", ".");
 
   // 3) SUÍTES
-  const suitesMatch = md.match(/(\d+)\s*su[íi]te/i);
+  const suitesMatch = flat.match(/(\d+)\s*su[íi]te/i);
   if (suitesMatch) ext.suites = suitesMatch[1];
 
   // 4) VAGAS
-  const vagasMatch = md.match(/(\d+)\s*vaga/i);
+  const vagasMatch = flat.match(/(\d+)\s*vaga/i);
   if (vagasMatch) ext.vagas = vagasMatch[1];
 
   // 5) ENDEREÇO — tenta primeiro com número (mais útil pra mesmo_predio); senão, sem número.
@@ -135,14 +144,15 @@ function mapExtraction(ext, url, subject = {}) {
   };
 }
 
-async function extractAmostra(url, subject = {}, _legacy = {}) {
-  const md = await fetchJinaMarkdown(url);
+async function extractAmostra(url, subject = {}, _legacy = {}, mdPronto = null) {
+  // 17/11 · mdPronto: página já lida por outro caminho (painel → n8n Ler_Link_Imovel com scrape.do)
+  const md = mdPronto || await fetchJinaMarkdown(url);
   const ext = extractFromMarkdown(md);
   return mapExtraction(ext, url, subject);
 }
 
 // extrai vários links e devolve [avaliando, ...candidatos]
-async function montarAmostras(avaliando, urls = [], subject = {}, _legacy = {}) {
+async function montarAmostras(avaliando, urls = [], subject = {}, _legacy = {}, markdowns = {}) {
   const out = [];
   if (avaliando && typeof avaliando === "object") {
     out.push({ ...avaliando, tipo: avaliando.tipo || "avaliando" });
@@ -150,7 +160,8 @@ async function montarAmostras(avaliando, urls = [], subject = {}, _legacy = {}) 
   const list = Array.isArray(urls) ? urls : [];
   for (const u of list) {
     if (!u) continue;
-    try { out.push(await extractAmostra(u, subject)); }
+    const md = markdowns && typeof markdowns === "object" && typeof markdowns[u] === "string" && markdowns[u].length > 50 ? markdowns[u] : null;
+    try { out.push(await extractAmostra(u, subject, {}, md)); }
     catch (e) { out.push({ tipo: "comparavel", nome: "(falha ao ler anúncio)", link: u, _erro: String(e.message || e) }); }
   }
   return out;
