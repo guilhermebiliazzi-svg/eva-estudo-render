@@ -541,7 +541,8 @@ function buildEstudo(data, opts={}){
     const tx=7.3, tw=2.2;
     const predio=im.predio_curto||"imóvel";
     const idadeTxt = im.idade_anos!=null ? ` (~${im.idade_anos} anos)` : "";
-    const vend=data.vendidos||[]; const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
+    // 17/11 · a compra do próprio imóvel antes da reforma não é "queda de preço" do prédio: fica fora das pontas
+    const vend=(data.vendidos||[]).filter(v=>!v.propria); const de=vend[0]||{}, ate=vend.find(v=>v.ancora)||vend[vend.length-1]||{};
     // fase do ciclo pela idade real (mesmas faixas do gráfico): <12 maturação · 12–25 platô · >25 declínio real
     const idadeN = Number(im.idade_anos);
     const faseTxt = !(idadeN >= 0) ? "" : (idadeN < 12
