@@ -537,6 +537,24 @@ function buildEstudo(data, opts={}){
       s.addText(`${im.predio_curto||"este imóvel"} · ~${Number(im.idade_anos)} anos`,
         {x:lx,y:yTop-0.32,w:lblW,h:0.27,fontFace:BODY,fontSize:10.5,color:NAVY,bold:true,
          align:"center",valign:"middle",margin:0,fill:{color:ICETINT}});
+      // 17/11 · apartamento reformado: o prédio continua com a idade dele, mas a parte da construção que é do
+      // apartamento volta a valer como nova (prêmio da reforma, que se desgasta em ~10 anos). Seta vermelha
+      // sobe a curva da construção no ano da reforma, na proporção do prêmio que ainda resta.
+      const rf = val.reforma;
+      if (rf && rf.ano && Number(rf.valor) > 0) {
+        const anosDesde = Math.max(0, new Date().getFullYear() - Number(rf.ano));
+        const idR = Math.max(0, Math.min(40, Number(im.idade_anos) - anosDesde));
+        const CURVA = [[0,0.502],[5,0.576],[10,0.628],[15,0.664],[20,0.692],[25,0.71],[30,0.724],[35,0.734],[40,0.741]]; // y da curva vermelha no ciclo_vida.png
+        const yCurva = t => { for (let i = 1; i < CURVA.length; i++) { const [a, ya] = CURVA[i-1], [b, yb] = CURVA[i];
+          if (t <= b) return ya + (yb - ya) * (t - a) / (b - a); } return CURVA[CURVA.length-1][1]; };
+        const fator = Math.max(0.2, Math.min(1, Number(rf.fator) || 1));
+        const y0 = yCurva(idR), y1 = y0 - (y0 - 0.51) * fator;   // 0.50 = construção nova (início da curva)
+        const rx = imgX + (PL + (idR/40)*(PR-PL))*imgW - 0.06;
+        s.addShape(p.shapes.LINE,{x:rx,y:imgY+y1*imgH,w:0,h:(y0-y1)*imgH,flipV:true,line:{color:RED,width:2.5,endArrowType:"triangle"}});
+        const vR = Number(rf.valor), vTxt = vR >= 1e6 ? "R$ " + (vR/1e6).toFixed(2).replace(".", ",") + " mi" : "R$ " + Math.round(vR/1000).toLocaleString("pt-BR") + " mil";
+        s.addText([{text:`Apartamento reformado em ${rf.ano}`,options:{bold:true,breakLine:true}},{text:`construção do apartamento volta a valer como nova: +${vTxt}`}],
+          {x:rx-2.45,y:imgY+(y1-0.01)*imgH,w:2.35,h:0.5,fontFace:BODY,fontSize:9,color:RED,align:"right",valign:"top",margin:0,fill:{color:WHITE}});
+      }
     }
     const tx=7.3, tw=2.2;
     const predio=im.predio_curto||"imóvel";
@@ -550,17 +568,26 @@ function buildEstudo(data, opts={}){
       : (idadeN <= 25
         ? `está no platô — por isso projetar o boom para a frente seria um erro.`
         : `já passou do platô: a construção está em declínio real e o valor é sustentado pelo terreno e pela localização — não pela inflação.`));
-    const terceiroParag = (im.idade_anos != null)
-      ? `O ${predio}${idadeTxt} ${faseTxt}`
-      : `Em prédios com histórico de venda forte como este, a fase do ciclo importa: o boom não se projeta linearmente para a frente.`;
+    // 17/11 · reformado: o prédio segue na fase dele, mas o apartamento não está "em declínio real"
+    const rfT = val.reforma;
+    const vRf = rfT ? Number(rfT.valor) : 0;
+    const vRfTxt = vRf >= 1e6 ? "R$ " + (vRf/1e6).toFixed(2).replace(".", ",") + " mi" : "R$ " + Math.round(vRf/1000).toLocaleString("pt-BR") + " mil";
+    const faseCurta = !(idadeN >= 0) ? "" : (idadeN < 12 ? "ainda está na fase de maturação" : (idadeN <= 25 ? "está no platô" : "já passou do platô"));
+    const terceiroParag = (rfT && im.idade_anos != null)
+      ? `O ${predio}${idadeTxt} ${faseCurta}, mas o apartamento foi reformado em ${rfT.ano}: a parte da construção que é dele voltou a valer como nova. Esse ganho está no valor (+${vRfTxt}) e se desgasta em cerca de 10 anos.`
+      : (im.idade_anos != null)
+        ? `O ${predio}${idadeTxt} ${faseTxt}`
+        : `Em prédios com histórico de venda forte como este, a fase do ciclo importa: o boom não se projeta linearmente para a frente.`;
+    // texto da direita cabe acima da linha do ITBI (antes vazava por cima dela)
     s.addText([
       {text:"O valor de um imóvel é terreno (valoriza) + construção (deprecia).",options:{color:INK,breakLine:true,bold:true}},
-      {text:"",options:{breakLine:true,fontSize:6}},
+      {text:"",options:{breakLine:true,fontSize:5}},
       {text:"O total sobe nos primeiros anos, atinge um platô e depois cede em termos reais.",options:{color:INK,breakLine:true}},
-      {text:"",options:{breakLine:true,fontSize:6}},
+      {text:"",options:{breakLine:true,fontSize:5}},
       {text:terceiroParag,options:{color:INK}},
-    ],{x:tx,y:1.7,w:tw,h:2.9,fontFace:BODY,fontSize:12,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.2});
-    const temPontas = de && de.valor && de.data && ate && ate.valor && ate.data;
+    ],{x:tx,y:1.55,w:tw+0.2,h:3.2,fontFace:BODY,fontSize:rfT ? 10 : 11,align:"left",valign:"top",margin:0,lineSpacingMultiple:1.12,fit:"shrink"});
+    // 17/11 · só compara as pontas quando são de anos diferentes (duas vendas do mesmo ano não são "queda")
+    const temPontas = de && de.valor && de.data && ate && ate.valor && ate.data && yearOf(de.data) !== yearOf(ate.data);
     if (temPontas) {
       s.addText(`A tabela do ITBI confirma: ${de.valor} (${yearOf(de.data)}) → ${ate.valor} (${yearOf(ate.data)}).`,
         {x:MX,y:4.85,w:8.9,h:0.4,fontFace:BODY,fontSize:12,color:NAVY,bold:true,align:"left",valign:"middle",margin:0});
