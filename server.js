@@ -287,7 +287,7 @@ app.post("/amostras", async (req, res) => {
   try {
     const { montarAmostras, montarAprovacao } = require("./amostra_extract");
     const { saveAmostras } = require("./amostras_store");
-    const { avaliando, urls, subject, phone } = req.body || {};
+    const { avaliando, urls, subject, phone, markdowns } = req.body || {};
     // urls pode vir como string JSON (n8n $fromAI 'string'), string com URLs separadas por nova-linha/vírgula,
     // ou array. Normaliza tudo pra array antes de processar.
     let urlList = urls;
@@ -301,7 +301,8 @@ app.post("/amostras", async (req, res) => {
       }
     }
     if (!Array.isArray(urlList)) urlList = [];
-    const amostras = await montarAmostras(avaliando, urlList, subject || {});
+    // 17/11 · markdowns { url: texto } = páginas já lidas pelo n8n (scrape.do), sem passar pelo Jina
+    const amostras = await montarAmostras(avaliando, urlList, subject || {}, {}, markdowns || {});
     // persistência: agente costuma "esquecer" de repassar amostras no Gerar_Estudo_Mercado.
     // se o caller passar phone, salvamos por sessão; /estudo recupera quando amostras vier vazio.
     if (phone && pool) {
