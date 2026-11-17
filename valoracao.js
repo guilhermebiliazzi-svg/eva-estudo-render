@@ -99,7 +99,7 @@ function ajusteEstado({ reforma_ano, reforma_padrao, estado, areaUtil, anoRef })
     if (fator <= 0) return { valor: 0, frase: "" };
     const premio = custoM2 * areaUtil * fator;
     return {
-      valor: premio,
+      valor: premio, ano: anoRf, fator,   // 17/11 · ano e fator vão para o slide do ciclo de vida
       frase: `Reforma ${padrao} (${anoRf}) incorporada: +${mi(premio)} — custo de obra ~R$ ${milhar(custoM2)}/m² sobre ${areaFmt(areaUtil)} m² úteis, depreciado pelo uso (${Math.round(fator*100)}% após ${idade} ano${idade===1?"":"s"}).`
     };
   }
@@ -449,6 +449,8 @@ function buildValoracao({ vendidos = [], amostras = [], ref, opts = {} }){
       + (travadoPorPedido && !elevadoPorVendas ? ` Valor limitado pelo menor anúncio concorrente de área similar (${milhoes(menorPedido)}) para manter a competitividade.` : "")
       + (elevadoPorVendas ? ` Fechamento no equilíbrio entre o que unidades idênticas fecharam (${usaRecentes ? (vendasRecentes.length === 1 ? "única venda dos últimos 24 meses" : `mediana de ${vendasRecentes.length} vendas dos últimos 24 meses`) : "última venda idêntica"} corrigida pelo IPCA${estadoAdj.valor < 0 ? ", menos o desconto de estado" : (estadoAdj.valor > 0 ? ", mais o prêmio da reforma" : ", com margem de 5%")} = ${milhoes(pisoVendasEstado)})${mediaPedidosSimilares > 0 ? ` e o que a concorrência de área similar pede hoje (média de ${pedidosAtivos.length} anúncio${pedidosAtivos.length===1?"":"s"} = ${milhoes(mediaPedidosSimilares)}, menos ${Math.round(desagio*100)}% de negociação = ${milhoes(pedidosFechamento)})` : ""}: ${milhoes(pisoFechamento)}.` : ""),
     estado_frase: estadoAdj.frase,
+    // 17/11 · reforma com prêmio (slide do ciclo de vida: o apartamento "rejuvenesce", o prédio não)
+    reforma: estadoAdj.valor > 0 && estadoAdj.ano ? { ano: estadoAdj.ano, valor: Math.round(estadoAdj.valor), fator: estadoAdj.fator } : null,
     // v3.5.1 · a conta aberta do slide "Pedido × Fechado" — cada passo com número (evita "de onde veio o 725?")
     passos_ajuste: elevadoPorVendas ? [
       usaRecentes
