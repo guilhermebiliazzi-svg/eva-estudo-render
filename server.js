@@ -515,6 +515,19 @@ app.post("/estudo", async (req, res) => {
             bairro: a.bairro, condominio: a.condominio_nome || "", endereco: a.address || "" }, a.link || "", subj)
         : a);
     }
+    // 17/11 · imóvel REFORMADO precisa de anúncios comparáveis: as vendas do prédio (ITBI) não dizem o estado
+    //         das unidades e, sozinhas, levam a "venda + custo da obra" (decisão Guilherme 17/11).
+    {
+      const anoAtual = new Date().getFullYear();
+      const rf = Number(body.reforma_ano) || 0;
+      const reformado = /reform/i.test(String(body.estado || "")) && (!rf || rf >= anoAtual - 9);
+      const comps = (Array.isArray(body.amostras) ? body.amostras : []).filter(a => a && a.tipo !== "avaliando" && Number(a.valor ?? a.preco) > 0);
+      if (reformado && !comps.length) {
+        const e = new Error("Imóvel reformado: o estudo precisa de anúncios comparáveis (imóveis parecidos à venda, de preferência reformados). As vendas do prédio não dizem o estado das unidades e não bastam para precificar a reforma.");
+        e.code = "REFORMADO_SEM_COMPARAVEIS";
+        throw e;
+      }
+    }
     // 14/11 · foto de capa de cada anúncio comparável (cartões do slide de comparáveis)
     if (Array.isArray(body.amostras) && body.amostras.length) {
       try {
@@ -536,7 +549,7 @@ app.post("/estudo", async (req, res) => {
     console.error("erro /estudo:", e);
     const code = e.code || null;
     // 422 quando não há ITBI -> o n8n distingue de erro real e responde honesto ao corretor
-    res.status(code === "NO_ITBI_DATA" ? 422 : 500).json({ error: String(e && e.message || e), code });
+    res.status(code === "NO_ITBI_DATA" || code === "REFORMADO_SEM_COMPARAVEIS" ? 422 : 500).json({ error: String(e && e.message || e), code });
   }
 });
 
