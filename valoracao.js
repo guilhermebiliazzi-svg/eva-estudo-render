@@ -87,7 +87,10 @@ const DEPRECIACAO_ANOS = 10;
 function ajusteEstado({ reforma_ano, reforma_padrao, estado, areaUtil, anoRef }){
   // retorna { valor, frase } — valor >0 (prêmio de reforma) ou <0 (desconto de estado original)
   if (!areaUtil) return { valor: 0, frase: "" };
-  const padrao = String(reforma_padrao||"").toLowerCase();
+  // 17/11 · a ficha do painel e a Eva mandam "alta" (= completa) e "média" com acento: antes não casavam
+  // com a tabela e o prêmio da reforma saía ZERO, sem aviso (caso Artur de Azevedo 1557, ap 42).
+  const p0 = String(reforma_padrao||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const padrao = /^(alt|complet|alto|luxo|premium)/.test(p0) ? "completa" : /^med/.test(p0) ? "media" : /^(simpl|basic|leve)/.test(p0) ? "simples" : p0;
   const custoM2 = CUSTO_REFORMA_M2[padrao] ?? null;
   const anoRf = Number(reforma_ano) || null;
   if (anoRf && custoM2) {
