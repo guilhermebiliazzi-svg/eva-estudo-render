@@ -78,6 +78,10 @@ function buildDecisaoTempo({
   meses_rapida = 3,           // rótulo do cenário de venda ágil
 } = {}) {
 
+  // 19/11 (Guilherme): o preço-alvo do proprietário NÃO entra mais no estudo — distorce a análise.
+  // O cenário "vende pelo alvo" usa sempre o valor médio de mercado do estudo.
+  preco_alvo = null;
+
   const P3 = Number(piso);
   if (!(P3 > 0)) {
     return { aplicavel: false, motivo: "Sem piso de faixa definido (ex.: modo global da valoração) — seção de decisão no tempo não se aplica." };
@@ -211,7 +215,7 @@ function buildDecisaoTempo({
     alvo_origem: alvoOrigem,               // "informado_dono" | "media_mercado" | "nao_definido"
     alvo_label: alvoEff == null ? "" : (alvoOrigem === "informado_dono"
       ? `preço que o proprietário quer (${milhoes(alvoEff)})`
-      : `preço médio de mercado do estudo (${milhoes(alvoEff)}) — proprietário sem alvo definido`),
+      : `preço médio de mercado do estudo (${milhoes(alvoEff)})`),
     i_mensal_pct: pctBR(im),
     i_anual_pct: pctBR(iaEff),
     taxa_label: `custo de oportunidade ${pctBR(iaEff)} a.a. (CDI líquido de IR) · ${pctBR(im)} a.m.`,
