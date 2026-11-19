@@ -25,6 +25,39 @@
 
 const { PDFDocument, StandardFonts } = require("pdf-lib");
 
+// 19/11: texto maior que o campo saía cortado (ex.: nome completo, endereço com bairro e cidade).
+// Diminui a fonte até caber numa linha (mínimo 7 pt); se ainda não couber, quebra em duas ou mais
+// linhas dentro da altura do campo (mínimo 5 pt). Campos que já cabem ficam como estão.
+function caber(tf, v, font) {
+  try {
+    const w = tf.acroField.getWidgets()[0];
+    if (!w) return;
+    const r = w.getRectangle();
+    const larg = r.width - 4, alt = r.height - 2;
+    if (!(larg > 0) || !(alt > 0)) return;
+    const da = String(tf.acroField.getDefaultAppearance() || "");
+    const m = da.match(/([\d.]+)\s+Tf/);
+    let base = m ? Number(m[1]) : 0;
+    if (!(base > 0)) base = Math.min(12, alt * 0.7); // tamanho automático: parte de um tamanho que cabe na altura
+    const larguraEm = (t, sz) => font.widthOfTextAtSize(t, sz);
+    if (larguraEm(v, base) <= larg) return;
+    for (let sz = base - 0.5; sz >= 7; sz -= 0.5) {
+      if (larguraEm(v, sz) <= larg) { tf.setFontSize(sz); return; }
+    }
+    // não coube numa linha: várias linhas, quebrando nas palavras
+    const palavras = v.split(/\s+/);
+    for (let sz = Math.min(base, 9); sz >= 5; sz -= 0.5) {
+      let linhas = 1, atual = "";
+      for (const p of palavras) {
+        const tent = atual ? atual + " " + p : p;
+        if (larguraEm(tent, sz) <= larg) atual = tent; else { linhas++; atual = p; }
+      }
+      if (linhas * sz * 1.2 <= alt) { tf.enableMultiline(); tf.setFontSize(sz); return; }
+    }
+    tf.setFontSize(7);
+  } catch (e) { /* mantém como veio */ }
+}
+
 module.exports = function (app) {
   app.post("/preencher-pdf", async (req, res) => {
     try {
@@ -46,6 +79,7 @@ module.exports = function (app) {
 
       const preenchidos = [];
       const ignorados = [];
+      const helv = await doc.embedFont(StandardFonts.Helvetica);
 
       for (const [semantico, valor] of Object.entries(valores)) {
         const v = valor == null ? "" : String(valor).trim();
@@ -57,7 +91,9 @@ module.exports = function (app) {
           continue;
         }
         try {
-          form.getTextField(nomeCampoPdf).setText(v);
+          const tf = form.getTextField(nomeCampoPdf);
+          tf.setText(v);
+          caber(tf, v, helv);
           preenchidos.push(semantico);
         } catch (e) {
           try {
@@ -71,7 +107,6 @@ module.exports = function (app) {
         }
       }
 
-      const helv = await doc.embedFont(StandardFonts.Helvetica);
       form.updateFieldAppearances(helv);
 
       // ACHATA o formulário: "queima" os valores como conteúdo fixo da página.
