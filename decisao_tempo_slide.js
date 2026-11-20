@@ -216,6 +216,32 @@ function addDecisaoTempoSlides(p, data, opts={}){
       cell(dt.vender_agora_vp,{fill:{color:GREENTINT},color:GREEN,bold:true}),
       cell("referência",{fill:{color:GREENTINT},color:GREEN}),
     ]);
+
+    // 20/11 (Guilherme): ANÚNCIO × FECHAMENTO — anuncia pelo valor de mercado e fecha com a margem
+    // normal de negociação num prazo curto. Mesma conta de valor presente dos cards.
+    const Db = dt._debug || {};
+    const imB = Db.im || 0.011, custoB = Db.custo_carreg_mensal || 0, mRapB = Db.meses_rapida || 3;
+    const NEG = 0.05, T_FECH = 6;
+    const anuncio = Db.valor_intermediario || potencialDe(P3);
+    const fatB = T => Math.pow(1 + imB, Math.max(0, T - mRapB));
+    const vpB = (preco, T) => preco / fatB(T) - (custoB !== 0 ? custoB * ((1 - 1/fatB(T)) / imB) : 0);
+    const eqB = T => P3 * fatB(T) + (custoB !== 0 ? custoB * (fatB(T) - 1) / imB : 0);
+    const milB = n => String(Math.round(Math.abs(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const reaisB = v => (v < 0 ? "−R$ " : "R$ ") + milB(v) + ",00";
+    const milhoesB = v => "R$ " + (Math.round(v / 1e4) / 100).toFixed(2).replace(".", ",") + " milhões";
+    const curtoB = v => { const a = Math.abs(Number(v)||0);
+      return a >= 995e3 ? "R$ " + (a/1e6).toFixed(2).replace(/\.?0+$/,"").replace(".", ",") + " mi" : "R$ " + Math.round(a/1e3) + " mil"; };
+    const fech = anuncio ? anuncio * (1 - NEG) : null;
+    const vpFech = fech ? vpB(fech, T_FECH) : null;
+    const dFech = vpFech != null ? vpFech - P3 : null;
+    if (fech && P3) {
+      rows.push([
+        cell(`Anuncia por ${curtoB(anuncio)} e fecha em ${T_FECH}m (−${Math.round(NEG*100)}%)`,{align:"left",bold:true}),
+        cell(milhoesB(fech),{bold:true}),
+        cell(milhoesB(vpFech),{bold:true}),
+        cell((dFech >= 0 ? "+" : "−") + reaisB(Math.abs(dFech)).replace(/^−/, ""),{color:(dFech >= 0 ? GREEN : RED),bold:true}),
+      ]);
+    }
     const shortByKey = k => k==="alvo" ? (alvoDono?"atinge o preço do proprietário":"vende pelo valor de mercado")
       : k==="piso" ? "encalha e vende pelo piso" : k.replace(/^enc/,"encalha −")+"%";
     // 16/10/2026 (Guilherme): a matriz não mostra mais os cenários "encalha −5% / −10%".
@@ -245,6 +271,23 @@ function addDecisaoTempoSlides(p, data, opts={}){
       {text:eqs,options:{color:NAVY,bold:true}},
       {text:".",options:{color:INK}},
     ],{x:MX,y:Math.min(4.16, 1.32 + 0.25*(rows.length+1) + 0.3),w:8.9,h:0.26,fontFace:BODY,fontSize:10.5,align:"left",valign:"middle",margin:0});
+
+    // 20/11: quadro "anúncio × fechamento esperado", no espaço entre a tabela e o aviso
+    if (fech && P3) {
+      const bY = Math.min(4.16, 1.32 + 0.25*(rows.length+1) + 0.3) + 0.36, bH = Math.max(0.5, Math.min(0.72, 4.42 - bY));
+      if (bH >= 0.5) {
+        s.addShape(p.shapes.RECTANGLE,{x:MX,y:bY,w:8.9,h:bH,fill:{color:ICETINT},line:{type:"none"}});
+        s.addShape(p.shapes.RECTANGLE,{x:MX,y:bY,w:0.08,h:bH,fill:{color:GREEN},line:{type:"none"}});
+        s.addText([
+          {text:"ANÚNCIO × FECHAMENTO.  ",options:{color:GREEN,bold:true,charSpacing:0.5}},
+          {text:`Anunciar por ${curtoB(anuncio)} e aceitar propostas a partir de ${curtoB(fech)} (${Math.round(NEG*100)}% de negociação). `,options:{color:NAVY,bold:true}},
+          {text: dFech >= 0
+            ? `Fechando por ${curtoB(fech)} em até ${T_FECH} meses, equivale a ${curtoB(vpFech)} de hoje: ${curtoB(dFech)} a mais que a venda rápida. Nesse prazo, a venda rápida só passa a valer mais com fechamento abaixo de ${curtoB(eqB(T_FECH))}.`
+            : `Fechando por ${curtoB(fech)} em ${T_FECH} meses, equivale a ${curtoB(vpFech)} de hoje: ${curtoB(-dFech)} a menos que a venda rápida. Para compensar nesse prazo, o fechamento precisa passar de ${curtoB(eqB(T_FECH))}.`,
+           options:{color:INK}},
+        ],{x:MX+0.25,y:bY+0.04,w:8.55,h:bH-0.08,fontFace:BODY,fontSize:10,align:"left",valign:"middle",margin:0,lineSpacingMultiple:1.08});
+      }
+    }
 
     // AVISO DE ESTIMATIVAS + fatores fora de controle + competitividade
     const dbY=4.5, dbH=0.76;
